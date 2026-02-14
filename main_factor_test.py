@@ -34,6 +34,7 @@
 # 导入因子库
 from factor_lib.momentum import MomentumFactors
 from factor_lib.reversal import ReversalFactors
+from factor_lib.volatility import VolatilityFactors
 from factor_lib.liquidity import LiquidityFactors
 from factor_lib.distribution import DistributionFactors
 
@@ -51,7 +52,7 @@ def main():
     print("*" + " " * 68 + "*")
     print("*   ETF因子测试系统                                            *")
     print("*   架构: 逻辑与运行分离                                        *")
-    print("*   类别: A类(趋势动量) + B类(反转均值回归) + D类(流动性) + E类(统计分布)    *")
+    print("*   类别: A类(趋势动量) + B类(反转均值) + C类(波动率) + D类(流动性) + E类(统计分布)   *")
     print("*" + " " * 68 + "*")
     print("*" * 70)
     
@@ -69,7 +70,7 @@ def main():
         # =========================================================================
         # A类：趋势与动量因子
         # =========================================================================
-        ('A01_波动率缩放动量', 
+        ('A01_波动率缩放动量_20', 
          MomentumFactors.A01_vol_scaled_mom, 
          {'close_df': close_df, 'period': 20}),
         
@@ -94,61 +95,143 @@ def main():
          {'close_df': close_df, 'high_df': high_df, 'period': 60}),
         
         # =========================================================================
-        # B类：反转与均值回归因子
+        # A类新增：波动率缩放动量多周期（A01系列）
         # =========================================================================
-        ('B01_Alpha006量价相关', 
-         ReversalFactors.B01_alpha006, 
-         {'close_df': close_df, 'vol_df': vol_df, 'period': 20}),
+        ('A01_波动率缩放动量_5日', 
+         MomentumFactors.A01_vol_scaled_mom, 
+         {'close_df': close_df, 'period': 5}),
         
-        ('B02_Alpha012量价变化', 
-         ReversalFactors.B02_alpha012, 
-         {'close_df': close_df, 'vol_df': vol_df}),
+        ('A01_波动率缩放动量_10日', 
+         MomentumFactors.A01_vol_scaled_mom, 
+         {'close_df': close_df, 'period': 10}),
         
-        ('B03_标准化价格偏离', 
-         ReversalFactors.B03_alpha001_gtja, 
+        ('A01_波动率缩放动量_40日', 
+         MomentumFactors.A01_vol_scaled_mom, 
+         {'close_df': close_df, 'period': 40}),
+        
+        ('A01_波动率缩放动量_60日', 
+         MomentumFactors.A01_vol_scaled_mom, 
+         {'close_df': close_df, 'period': 60}),
+        
+        # =========================================================================
+        # A类新增：简单动量系列（多周期）
+        # =========================================================================
+        ('A07_简单动量_5日', 
+         MomentumFactors.A07_simple_momentum, 
+         {'close_df': close_df, 'period': 5}),
+        
+        ('A07_简单动量_10日', 
+         MomentumFactors.A07_simple_momentum, 
+         {'close_df': close_df, 'period': 10}),
+        
+        ('A07_简单动量_20日', 
+         MomentumFactors.A07_simple_momentum, 
          {'close_df': close_df, 'period': 20}),
         
-        ('B04_Alpha013量价协方差', 
-         ReversalFactors.B04_alpha013, 
-         {'close_df': close_df, 'vol_df': vol_df, 'period': 20}),
-        
-        ('B05_KD指标', 
-         ReversalFactors.B05_kd_stochastic, 
-         {'close_df': close_df, 'high_df': high_df, 'low_df': low_df, 'n': 14}),
-        
-        ('B06_VWAP偏离', 
-         ReversalFactors.B06_vwap_deviation, 
-         {'close_df': close_df, 'vol_df': vol_df, 'period': 20}),
+        ('A07_简单动量_60日', 
+         MomentumFactors.A07_simple_momentum, 
+         {'close_df': close_df, 'period': 60}),
         
         # =========================================================================
-        # D类：微观结构与流动性因子
+        # A类新增：Rank动量、信息比率动量、动量偏离度
         # =========================================================================
-        ('D01_Amihud变化率', 
-         LiquidityFactors.D01_amihud_change, 
-         {'close_df': close_df, 'amount_df': amount_df, 'period': 20}),
-        
-        ('D02_日内动量', 
-         LiquidityFactors.D02_intraday_momentum, 
-         {'close_df': close_df, 'open_df': open_df, 'high_df': high_df, 'low_df': low_df}),
-        
-        ('D03_高低价差比', 
-         LiquidityFactors.D03_high_low_range, 
-         {'close_df': close_df, 'high_df': high_df, 'low_df': low_df, 'vol_df': vol_df, 'period': 20}),
-        
-        ('D04_开盘跳空', 
-         LiquidityFactors.D04_overnight_gap, 
-         {'close_df': close_df, 'open_df': open_df}),
-        
-        # =========================================================================
-        # E类：统计分布因子
-        # =========================================================================
-        ('E01_偏度', 
-         DistributionFactors.E01_skewness, 
+        ('A08_Rank动量', 
+         MomentumFactors.A08_rank_momentum, 
          {'close_df': close_df, 'period': 20}),
         
-        ('E02_峰度', 
-         DistributionFactors.E02_kurtosis, 
-         {'close_df': close_df, 'period': 20}),
+        ('A10_动量偏离度', 
+         MomentumFactors.A10_momentum_divergence, 
+         {'close_df': close_df, 'short_period': 5, 'long_period': 20}), # 短期
+                
+        # =========================================================================
+        # =========================================================================
+        ('A11_Alpha002量价相关', 
+         MomentumFactors.A11_alpha002_volume_price_corr, 
+         {'close_df': close_df, 'vol_df': vol_df, 'period': 10}),
+                
+        ('A12_Alpha004低估值动量', 
+         MomentumFactors.A12_alpha004_low_price_momentum, 
+         {'close_df': close_df, 'low_df': low_df, 'period': 10}),
+                
+        ('A13_Alpha005收益率排名', 
+         MomentumFactors.A13_alpha005_return_rank, 
+         {'close_df': close_df, 'period': 10}),
+                
+        # # =========================================================================
+        # # B类：反转与均值回归因子
+        # # =========================================================================
+        # ('B01_Alpha006量价相关', 
+        #  ReversalFactors.B01_alpha006, 
+        #  {'close_df': close_df, 'vol_df': vol_df, 'period': 20}),
+        
+        # ('B02_Alpha012量价变化', 
+        #  ReversalFactors.B02_alpha012, 
+        #  {'close_df': close_df, 'vol_df': vol_df}),
+        
+        # ('B03_标准化价格偏离', 
+        #  ReversalFactors.B03_alpha001_gtja, 
+        #  {'close_df': close_df, 'period': 20}),
+        
+        # ('B04_Alpha013量价协方差', 
+        #  ReversalFactors.B04_alpha013, 
+        #  {'close_df': close_df, 'vol_df': vol_df, 'period': 20}),
+        
+        # ('B05_KD指标', 
+        #  ReversalFactors.B05_kd_stochastic, 
+        #  {'close_df': close_df, 'high_df': high_df, 'low_df': low_df, 'n': 14}),
+        
+        # ('B06_VWAP偏离', 
+        #  ReversalFactors.B06_vwap_deviation, 
+        #  {'close_df': close_df, 'vol_df': vol_df, 'period': 20}),
+        
+        # # =========================================================================
+        # # C类：波动率与风险因子
+        # # =========================================================================
+        # ('C01_下行波动占比', 
+        #  VolatilityFactors.C01_downside_volatility, 
+        #  {'close_df': close_df, 'period': 20}),
+        
+        # ('C02_极差波动率', 
+        #  VolatilityFactors.C02_parkinson_volatility, 
+        #  {'high_df': high_df, 'low_df': low_df, 'period': 20}),
+        
+        # ('C03_Alpha023', 
+        #  VolatilityFactors.C03_alpha023_gtja, 
+        #  {'close_df': close_df, 'period': 20}),
+        
+        # ('C04_ATR占比', 
+        #  VolatilityFactors.C04_atr_ratio, 
+        #  {'close_df': close_df, 'high_df': high_df, 'low_df': low_df, 'period': 14}),
+        
+        # # =========================================================================
+        # # D类：微观结构与流动性因子
+        # # =========================================================================
+        # ('D01_Amihud变化率', 
+        #  LiquidityFactors.D01_amihud_change, 
+        #  {'close_df': close_df, 'amount_df': amount_df, 'period': 20}),
+        
+        # ('D02_日内动量', 
+        #  LiquidityFactors.D02_intraday_momentum, 
+        #  {'close_df': close_df, 'open_df': open_df, 'high_df': high_df, 'low_df': low_df}),
+        
+        # ('D03_高低价差比', 
+        #  LiquidityFactors.D03_high_low_range, 
+        #  {'close_df': close_df, 'high_df': high_df, 'low_df': low_df, 'vol_df': vol_df, 'period': 20}),
+        
+        # ('D04_开盘跳空', 
+        #  LiquidityFactors.D04_overnight_gap, 
+        #  {'close_df': close_df, 'open_df': open_df}),
+        
+        # # =========================================================================
+        # # E类：统计分布因子
+        # # =========================================================================
+        # ('E01_偏度', 
+        #  DistributionFactors.E01_skewness, 
+        #  {'close_df': close_df, 'period': 20}),
+        
+        # ('E02_峰度', 
+        #  DistributionFactors.E02_kurtosis, 
+        #  {'close_df': close_df, 'period': 20}),
         
         # =========================================================================
         # 后续可以在这里无限添加 C, F, G, H 类因子
