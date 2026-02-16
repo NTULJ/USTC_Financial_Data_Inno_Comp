@@ -1,0 +1,15 @@
+name: financial_inno_comp
+channels:
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free
+dependencies:
+  - python>=3.9,<3.12
+  - numpy
+  - pandas
+  - scipy
+  - joblib
+  - pip
+  - pip:
+    - bt
+    - openpyxl

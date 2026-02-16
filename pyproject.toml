@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qfcomp"
+version = "0.1.0"
+description = "USTC Financial Data Innovation Competition Toolkit"
+requires-python = ">=3.9,<3.12"
+dependencies = [
+  "numpy",
+  "pandas",
+  "scipy",
+  "bt",
+  "joblib",
+  "openpyxl",
+]
+
+[project.scripts]
+qf-main = "qfcomp.pipelines.run_main:main"
+qf-build-library = "qfcomp.pipelines.run_build_library:main"
+qf-task1 = "qfcomp.task_1.pipeline:main"
+qf-task2 = "qfcomp.task_2.pipeline:main"
+qf-task3 = "qfcomp.task_3.pipeline:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
