@@ -9,7 +9,9 @@ dependencies:
   - pandas
   - scipy
   - joblib
+  - matplotlib
   - pip
   - pip:
     - bt
     - openpyxl
+    - optuna

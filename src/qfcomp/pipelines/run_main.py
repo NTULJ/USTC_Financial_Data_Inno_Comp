@@ -17,6 +17,7 @@ from pathlib import Path
 from qfcomp.config import (
     OUTPUT_DIR, TOP_N, MAX_SINGLE_WEIGHT, MIN_HOLDINGS,
     BACKTEST_START, FORWARD_RETURN_PERIODS,
+    COV_LOOKBACK, CVAR_ALPHA, CVAR_TURNOVER_LAMBDA, HYBRID_BETA, OPTIMIZER_METHOD,
 )
 from qfcomp.data_loader.loader import load_all
 from qfcomp.factors.calc import compute_factors, prepare_factor_matrices
@@ -124,9 +125,16 @@ def main():
 
     opt_schedule = build_optimized_schedule(
         composite, close_matrix,
-        optimizer="risk_parity",
-        top_n=TOP_N, max_weight=MAX_SINGLE_WEIGHT, min_holdings=MIN_HOLDINGS,
+        optimizer=OPTIMIZER_METHOD,
+        top_n=TOP_N,
+        max_weight=MAX_SINGLE_WEIGHT,
+        min_holdings=MIN_HOLDINGS,
+        cov_window=COV_LOOKBACK,
+        cvar_alpha=CVAR_ALPHA,
+        turnover_lambda=CVAR_TURNOVER_LAMBDA,
+        hybrid_beta=HYBRID_BETA,
     )
+    print(f"  优化器: {OPTIMIZER_METHOD}")
     print(f"  优化调仓日数: {len(opt_schedule)}")
 
     # 应用宏观仓位调节
@@ -181,11 +189,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # print("=" * 60)
-    # data=load_all()
-    # panel_wide, macro_df = compute_factors(data["aligned"])
-    # # processed = prepare_factor_matrices(panel_wide, method="rank")
-    # # print(f"  面板因子数: {len(processed)}")
-    # print(panel_wide.keys())
     main()
-

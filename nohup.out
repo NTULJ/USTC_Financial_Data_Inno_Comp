@@ -1,0 +1,372 @@
+/Users/mac/miniforge3/envs/financial_inno_comp/lib/python3.10/site-packages/optuna/_experimental.py:33: ExperimentalWarning: Argument ``multivariate`` is an experimental feature. The interface can change in the future.
+  optuna_warn(
+[I 2026-02-21 21:54:24,786] A new study created in memory with name: no-name-fa08b875-f9a7-4e80-b348-be84728ea06e
+输出目录: /Users/mac/Desktop/USTC_Financial_Data_Inno_Comp/outputs/cvar_hybrid_bayes_split_20260221_215421
+============================================================
+Step 0: 数据加载
+加载量价数据...
+  量价: 2019-11-01 ~ 2025-10-30, 28 只 ETF, 40651 行
+加载宏观数据...
+  宏观: 1454 行, 18 个指标
+构建对齐宽表...
+构建收盘价矩阵...
+  矩阵: 1454 天 × 28 只 ETF
+============================================================
+Step 1: 因子计算与合成（fresh）
+正在计算全部因子...
+  截面因子: 32 个, 日期范围 2019-11-01 00:00:00 ~ 2025-10-30 00:00:00
+  宏观因子: ['F01', 'F02', 'F03', 'F04', 'F05', 'F06']
+合成因子使用 13 个因子: ['A01', 'A02', 'A05', 'A06', 'B01', 'B03', 'B05', 'B06', 'C03', 'D01', 'D02', 'D04', 'T01']
+合成方法: icir, 滚动窗口: 60
+因子方向: {'A01': '+', 'A02': '+', 'A05': '+', 'A06': '+', 'B01': '-', 'B03': '+', 'B05': '+', 'B06': '-', 'C03': '-', 'D01': '+', 'D02': '+', 'D04': '-', 'T01': '-'}
+合成因子: 1416 天 × 28 只 ETF
+有效日期: 2019-12-25 00:00:00 ~ 2025-10-30 00:00:00
+合成因子已保存: /Users/mac/Desktop/USTC_Financial_Data_Inno_Comp/outputs/cvar_hybrid_bayes_split_20260221_215421/合成因子序列.csv (38951 行)
+============================================================
+Step 2: 固定切分完成 train[2019-11-01~2020-12-31], test[2021-01-04~2025-10-30], train_days=286
+============================================================
+Step 3: 启动贝叶斯调参（optimizer=hybrid_cvar_rp, fixed_max_weight=0.35, top_n_range=[3,7], n_trials=160）
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 29.67it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 41.49it/s]
+[I 2026-02-21 21:54:25,168] Trial 0 finished with value: 0.08072457042317005 and parameters: {'top_n': 3, 'cvar_alpha': 0.9365439923567689, 'cov_window': 90, 'turnover_lambda': 0.003836942975027202, 'hybrid_beta': 0.2}. Best is trial 0 with value: 0.08072457042317005.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 27.06it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 22.70it/s]
+[I 2026-02-21 21:54:25,810] Trial 1 finished with value: -8.717506391753087 and parameters: {'top_n': 7, 'cvar_alpha': 0.9399654127858815, 'cov_window': 135, 'turnover_lambda': 0.0021634800806266414, 'hybrid_beta': 0.45}. Best is trial 0 with value: 0.08072457042317005.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 30.62it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.27it/s]
+[I 2026-02-21 21:54:26,303] Trial 2 finished with value: -7.549625218017688 and parameters: {'top_n': 4, 'cvar_alpha': 0.94812282711772, 'cov_window': 105, 'turnover_lambda': 0.0023330920425348625, 'hybrid_beta': 0.55}. Best is trial 0 with value: 0.08072457042317005.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 35.58it/s]
+[I 2026-02-21 21:54:26,626] Trial 3 finished with value: -0.3208085420397768 and parameters: {'top_n': 4, 'cvar_alpha': 0.9242993668828355, 'cov_window': 110, 'turnover_lambda': 0.002461457417615221, 'hybrid_beta': 0.5}. Best is trial 0 with value: 0.08072457042317005.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 27.46it/s]
+[I 2026-02-21 21:54:27,015] Trial 4 finished with value: -10.97855832437739 and parameters: {'top_n': 7, 'cvar_alpha': 0.9582879054861232, 'cov_window': 120, 'turnover_lambda': 0.02652132004974052, 'hybrid_beta': 0.25}. Best is trial 0 with value: 0.08072457042317005.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 30.55it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 30.36it/s]
+[I 2026-02-21 21:54:27,554] Trial 5 finished with value: -12.242925774766015 and parameters: {'top_n': 6, 'cvar_alpha': 0.9049500029818294, 'cov_window': 170, 'turnover_lambda': 0.004482386567434429, 'hybrid_beta': 0.15000000000000002}. Best is trial 0 with value: 0.08072457042317005.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 43.29it/s]
+[I 2026-02-21 21:54:27,822] Trial 6 finished with value: 0.09260204949610662 and parameters: {'top_n': 3, 'cvar_alpha': 0.9325921509168243, 'cov_window': 125, 'turnover_lambda': 0.011206332788857383, 'hybrid_beta': 0.6}. Best is trial 6 with value: 0.09260204949610662.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 27.86it/s]
+[I 2026-02-21 21:54:28,209] Trial 7 finished with value: -11.397679745781167 and parameters: {'top_n': 7, 'cvar_alpha': 0.9546091845468093, 'cov_window': 135, 'turnover_lambda': 0.0026507317093812993, 'hybrid_beta': 0.1}. Best is trial 6 with value: 0.09260204949610662.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 27.89it/s]
+[I 2026-02-21 21:54:28,604] Trial 8 finished with value: -7.815636334081221 and parameters: {'top_n': 7, 'cvar_alpha': 0.9247171790031815, 'cov_window': 170, 'turnover_lambda': 0.012347294835509896, 'hybrid_beta': 0.4}. Best is trial 6 with value: 0.09260204949610662.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.52it/s]
+[I 2026-02-21 21:54:28,904] Trial 9 finished with value: -1.854381271542186 and parameters: {'top_n': 4, 'cvar_alpha': 0.9538048361844518, 'cov_window': 100, 'turnover_lambda': 0.005979260394099585, 'hybrid_beta': 0.6}. Best is trial 6 with value: 0.09260204949610662.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 30.61it/s]
+[I 2026-02-21 21:54:29,262] Trial 10 finished with value: -0.5916959057143654 and parameters: {'top_n': 6, 'cvar_alpha': 0.9267036847493809, 'cov_window': 135, 'turnover_lambda': 0.006091215738702276, 'hybrid_beta': 0.45}. Best is trial 6 with value: 0.09260204949610662.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.64it/s]
+[I 2026-02-21 21:54:29,572] Trial 11 finished with value: 0.2102277083783286 and parameters: {'top_n': 4, 'cvar_alpha': 0.9402087098821429, 'cov_window': 150, 'turnover_lambda': 0.010421447190300288, 'hybrid_beta': 0.35000000000000003}. Best is trial 11 with value: 0.2102277083783286.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.16it/s]
+[I 2026-02-21 21:54:29,893] Trial 12 finished with value: 1.7768023450033656 and parameters: {'top_n': 4, 'cvar_alpha': 0.9119496885973621, 'cov_window': 160, 'turnover_lambda': 0.004390235708507322, 'hybrid_beta': 0.4}. Best is trial 12 with value: 1.7768023450033656.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.15it/s]
+[I 2026-02-21 21:54:30,201] Trial 13 finished with value: 1.8139073679006417 and parameters: {'top_n': 4, 'cvar_alpha': 0.9086687027053697, 'cov_window': 120, 'turnover_lambda': 0.0046337785423406965, 'hybrid_beta': 0.15000000000000002}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 33.28it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 33.30it/s]
+[I 2026-02-21 21:54:30,704] Trial 14 finished with value: -2.040143080555863 and parameters: {'top_n': 5, 'cvar_alpha': 0.9147205951778016, 'cov_window': 155, 'turnover_lambda': 0.014060092356536578, 'hybrid_beta': 0.45}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.73it/s]
+[I 2026-02-21 21:54:30,975] Trial 15 finished with value: 0.0717956603734815 and parameters: {'top_n': 3, 'cvar_alpha': 0.9566185456910574, 'cov_window': 130, 'turnover_lambda': 0.022862739890549117, 'hybrid_beta': 0.1}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 33.07it/s]
+[I 2026-02-21 21:54:31,320] Trial 16 finished with value: -7.065178206266694 and parameters: {'top_n': 5, 'cvar_alpha': 0.9579245149006358, 'cov_window': 180, 'turnover_lambda': 0.0021352783871732076, 'hybrid_beta': 0.30000000000000004}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.16it/s]
+[I 2026-02-21 21:54:31,633] Trial 17 finished with value: 0.23344093975058766 and parameters: {'top_n': 4, 'cvar_alpha': 0.9038232340990389, 'cov_window': 135, 'turnover_lambda': 0.0020277219498083376, 'hybrid_beta': 0.35000000000000003}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 27.53it/s]
+[I 2026-02-21 21:54:32,027] Trial 18 finished with value: -6.275464190824825 and parameters: {'top_n': 7, 'cvar_alpha': 0.9530160878984333, 'cov_window': 180, 'turnover_lambda': 0.014831236731451428, 'hybrid_beta': 0.1}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 31.03it/s]
+[I 2026-02-21 21:54:32,508] Trial 19 finished with value: -5.993036141225838 and parameters: {'top_n': 5, 'cvar_alpha': 0.9531539697328724, 'cov_window': 105, 'turnover_lambda': 0.006643641372677632, 'hybrid_beta': 0.4}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 41.83it/s]
+[I 2026-02-21 21:54:32,792] Trial 20 finished with value: 0.08838997373569457 and parameters: {'top_n': 3, 'cvar_alpha': 0.9294065796641438, 'cov_window': 80, 'turnover_lambda': 0.004650850059988862, 'hybrid_beta': 0.45}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 29.76it/s]
+[I 2026-02-21 21:54:33,212] Trial 21 finished with value: -6.423490507729987 and parameters: {'top_n': 6, 'cvar_alpha': 0.956493254625499, 'cov_window': 160, 'turnover_lambda': 0.003582270451981044, 'hybrid_beta': 0.55}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 32.76it/s]
+[I 2026-02-21 21:54:33,558] Trial 22 finished with value: -5.755843379540237 and parameters: {'top_n': 5, 'cvar_alpha': 0.9506938732546113, 'cov_window': 175, 'turnover_lambda': 0.01887835332007076, 'hybrid_beta': 0.25}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 31.48it/s]
+[I 2026-02-21 21:54:33,899] Trial 23 finished with value: -6.582887145741908 and parameters: {'top_n': 5, 'cvar_alpha': 0.925961884773816, 'cov_window': 150, 'turnover_lambda': 0.007431312755280828, 'hybrid_beta': 0.05}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 33.63it/s]
+[I 2026-02-21 21:54:34,287] Trial 24 finished with value: -10.468191924599953 and parameters: {'top_n': 6, 'cvar_alpha': 0.9122823729702393, 'cov_window': 155, 'turnover_lambda': 0.0026622293614792752, 'hybrid_beta': 0.0}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.00it/s]
+[I 2026-02-21 21:54:34,618] Trial 25 finished with value: -7.49463906699247 and parameters: {'top_n': 4, 'cvar_alpha': 0.9581553302298633, 'cov_window': 150, 'turnover_lambda': 0.006131432295539535, 'hybrid_beta': 0.05}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 41.83it/s]
+[I 2026-02-21 21:54:34,906] Trial 26 finished with value: 0.06410986100136329 and parameters: {'top_n': 3, 'cvar_alpha': 0.9435727004256464, 'cov_window': 175, 'turnover_lambda': 0.002088708998054876, 'hybrid_beta': 0.35000000000000003}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 29.55it/s]
+[I 2026-02-21 21:54:35,287] Trial 27 finished with value: 1.4796482074228672 and parameters: {'top_n': 6, 'cvar_alpha': 0.9175318526565605, 'cov_window': 130, 'turnover_lambda': 0.018170638006804383, 'hybrid_beta': 0.35000000000000003}. Best is trial 13 with value: 1.8139073679006417.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.89it/s]
+[I 2026-02-21 21:54:35,604] Trial 28 finished with value: 1.9179662977556604 and parameters: {'top_n': 4, 'cvar_alpha': 0.9046534683296983, 'cov_window': 130, 'turnover_lambda': 0.007106712657025364, 'hybrid_beta': 0.1}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.88it/s]
+[I 2026-02-21 21:54:35,871] Trial 29 finished with value: 0.08767936642025864 and parameters: {'top_n': 3, 'cvar_alpha': 0.9305040559287844, 'cov_window': 110, 'turnover_lambda': 0.00357518901503357, 'hybrid_beta': 0.05}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.02it/s]
+[I 2026-02-21 21:54:36,152] Trial 30 finished with value: 0.07866009810442165 and parameters: {'top_n': 3, 'cvar_alpha': 0.9054003615309268, 'cov_window': 150, 'turnover_lambda': 0.009607819839124404, 'hybrid_beta': 0.15000000000000002}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.27it/s]
+[I 2026-02-21 21:54:36,442] Trial 31 finished with value: 0.08690140822491044 and parameters: {'top_n': 3, 'cvar_alpha': 0.9097297948926825, 'cov_window': 180, 'turnover_lambda': 0.004800786652908422, 'hybrid_beta': 0.45}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 27.33it/s]
+[I 2026-02-21 21:54:36,833] Trial 32 finished with value: -10.834880529233683 and parameters: {'top_n': 7, 'cvar_alpha': 0.9129734250071057, 'cov_window': 135, 'turnover_lambda': 0.029268048271610288, 'hybrid_beta': 0.30000000000000004}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 31.43it/s]
+[I 2026-02-21 21:54:37,167] Trial 33 finished with value: -2.051716618127233 and parameters: {'top_n': 5, 'cvar_alpha': 0.9175164003361768, 'cov_window': 110, 'turnover_lambda': 0.018031841889715166, 'hybrid_beta': 0.30000000000000004}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.28it/s]
+[I 2026-02-21 21:54:37,492] Trial 34 finished with value: 1.8653575883279558 and parameters: {'top_n': 4, 'cvar_alpha': 0.9061988631942893, 'cov_window': 110, 'turnover_lambda': 0.005733113333661296, 'hybrid_beta': 0.1}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 41.84it/s]
+[I 2026-02-21 21:54:37,763] Trial 35 finished with value: 0.06705951670014709 and parameters: {'top_n': 3, 'cvar_alpha': 0.9003180469950625, 'cov_window': 100, 'turnover_lambda': 0.005704389477941204, 'hybrid_beta': 0.1}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 32.55it/s]
+[I 2026-02-21 21:54:38,100] Trial 36 finished with value: -8.529132455275617 and parameters: {'top_n': 5, 'cvar_alpha': 0.9116793291700311, 'cov_window': 105, 'turnover_lambda': 0.00728250352684804, 'hybrid_beta': 0.05}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.29it/s]
+[I 2026-02-21 21:54:38,417] Trial 37 finished with value: 1.848348552259215 and parameters: {'top_n': 4, 'cvar_alpha': 0.908693452993421, 'cov_window': 135, 'turnover_lambda': 0.003009456134812295, 'hybrid_beta': 0.1}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.67it/s]
+[I 2026-02-21 21:54:38,733] Trial 38 finished with value: 1.8191861071392834 and parameters: {'top_n': 4, 'cvar_alpha': 0.909196633411748, 'cov_window': 130, 'turnover_lambda': 0.0034883310723028576, 'hybrid_beta': 0.2}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 43.28it/s]
+[I 2026-02-21 21:54:39,017] Trial 39 finished with value: 0.06755325965294912 and parameters: {'top_n': 3, 'cvar_alpha': 0.9175579140082173, 'cov_window': 160, 'turnover_lambda': 0.002725241458157174, 'hybrid_beta': 0.15000000000000002}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.30it/s]
+[I 2026-02-21 21:54:39,336] Trial 40 finished with value: 1.9179144616720702 and parameters: {'top_n': 4, 'cvar_alpha': 0.914243900149307, 'cov_window': 135, 'turnover_lambda': 0.003778856223919029, 'hybrid_beta': 0.0}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.69it/s]
+[I 2026-02-21 21:54:39,653] Trial 41 finished with value: 1.8894533115110126 and parameters: {'top_n': 4, 'cvar_alpha': 0.9006270102477475, 'cov_window': 125, 'turnover_lambda': 0.003392219327636219, 'hybrid_beta': 0.0}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.58it/s]
+[I 2026-02-21 21:54:39,932] Trial 42 finished with value: 0.0808000540985283 and parameters: {'top_n': 3, 'cvar_alpha': 0.9025360402487513, 'cov_window': 135, 'turnover_lambda': 0.0024653603758984003, 'hybrid_beta': 0.0}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 32.80it/s]
+[I 2026-02-21 21:54:40,274] Trial 43 finished with value: -8.483109084061232 and parameters: {'top_n': 5, 'cvar_alpha': 0.9019267481852548, 'cov_window': 145, 'turnover_lambda': 0.006531279098852623, 'hybrid_beta': 0.05}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 31.93it/s]
+[I 2026-02-21 21:54:40,614] Trial 44 finished with value: -9.437653350159497 and parameters: {'top_n': 5, 'cvar_alpha': 0.9101108824355228, 'cov_window': 130, 'turnover_lambda': 0.0024237614068921666, 'hybrid_beta': 0.1}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.98it/s]
+[I 2026-02-21 21:54:40,933] Trial 45 finished with value: 1.8879476278305634 and parameters: {'top_n': 4, 'cvar_alpha': 0.9175034851774002, 'cov_window': 140, 'turnover_lambda': 0.0030606299634587837, 'hybrid_beta': 0.05}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 33.01it/s]
+[I 2026-02-21 21:54:41,266] Trial 46 finished with value: -7.242784405727415 and parameters: {'top_n': 5, 'cvar_alpha': 0.9015603777925072, 'cov_window': 85, 'turnover_lambda': 0.002731749736444094, 'hybrid_beta': 0.1}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.96it/s]
+[I 2026-02-21 21:54:41,592] Trial 47 finished with value: -7.130141114752238 and parameters: {'top_n': 5, 'cvar_alpha': 0.9195023487656688, 'cov_window': 110, 'turnover_lambda': 0.0031015211794579735, 'hybrid_beta': 0.0}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.16it/s]
+[I 2026-02-21 21:54:41,907] Trial 48 finished with value: 1.8846744306777083 and parameters: {'top_n': 4, 'cvar_alpha': 0.9021953795299511, 'cov_window': 130, 'turnover_lambda': 0.004225190790195327, 'hybrid_beta': 0.05}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.75it/s]
+[I 2026-02-21 21:54:42,227] Trial 49 finished with value: 1.833104808541457 and parameters: {'top_n': 4, 'cvar_alpha': 0.9165452023286695, 'cov_window': 145, 'turnover_lambda': 0.0034173048508134222, 'hybrid_beta': 0.05}. Best is trial 28 with value: 1.9179662977556604.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.49it/s]
+[I 2026-02-21 21:54:42,540] Trial 50 finished with value: 1.9283007115047837 and parameters: {'top_n': 4, 'cvar_alpha': 0.9071156476269931, 'cov_window': 120, 'turnover_lambda': 0.005987222957438868, 'hybrid_beta': 0.0}. Best is trial 50 with value: 1.9283007115047837.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.93it/s]
+[I 2026-02-21 21:54:42,817] Trial 51 finished with value: 0.08874094221489726 and parameters: {'top_n': 3, 'cvar_alpha': 0.9174262531538244, 'cov_window': 120, 'turnover_lambda': 0.005074018431030333, 'hybrid_beta': 0.05}. Best is trial 50 with value: 1.9283007115047837.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.30it/s]
+[I 2026-02-21 21:54:43,139] Trial 52 finished with value: 0.37807524605980425 and parameters: {'top_n': 4, 'cvar_alpha': 0.9060025054111934, 'cov_window': 135, 'turnover_lambda': 0.004841411791270167, 'hybrid_beta': 0.05}. Best is trial 50 with value: 1.9283007115047837.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 43.07it/s]
+[I 2026-02-21 21:54:43,411] Trial 53 finished with value: 0.07434982201029872 and parameters: {'top_n': 3, 'cvar_alpha': 0.9184187120424556, 'cov_window': 125, 'turnover_lambda': 0.01091401163750142, 'hybrid_beta': 0.0}. Best is trial 50 with value: 1.9283007115047837.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.59it/s]
+[I 2026-02-21 21:54:43,735] Trial 54 finished with value: 1.851933130262104 and parameters: {'top_n': 4, 'cvar_alpha': 0.9006367498051925, 'cov_window': 115, 'turnover_lambda': 0.003371174963934171, 'hybrid_beta': 0.05}. Best is trial 50 with value: 1.9283007115047837.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 40.24it/s]
+[I 2026-02-21 21:54:44,043] Trial 55 finished with value: 1.9068397160177946 and parameters: {'top_n': 4, 'cvar_alpha': 0.9080097784298734, 'cov_window': 115, 'turnover_lambda': 0.008661338392882495, 'hybrid_beta': 0.0}. Best is trial 50 with value: 1.9283007115047837.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 41.78it/s]
+[I 2026-02-21 21:54:44,338] Trial 56 finished with value: 0.0771610210045015 and parameters: {'top_n': 3, 'cvar_alpha': 0.9231942227355566, 'cov_window': 180, 'turnover_lambda': 0.026604253264066728, 'hybrid_beta': 0.25}. Best is trial 50 with value: 1.9283007115047837.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.71it/s]
+[I 2026-02-21 21:54:44,611] Trial 57 finished with value: 0.0859548062475799 and parameters: {'top_n': 3, 'cvar_alpha': 0.9038335244708252, 'cov_window': 120, 'turnover_lambda': 0.0104434038127712, 'hybrid_beta': 0.0}. Best is trial 50 with value: 1.9283007115047837.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.48it/s]
+[I 2026-02-21 21:54:44,919] Trial 58 finished with value: -0.34057127110948393 and parameters: {'top_n': 4, 'cvar_alpha': 0.9012088758595588, 'cov_window': 105, 'turnover_lambda': 0.011171641100295828, 'hybrid_beta': 0.25}. Best is trial 50 with value: 1.9283007115047837.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 28.86it/s]
+[I 2026-02-21 21:54:45,341] Trial 59 finished with value: 1.9436470018969516 and parameters: {'top_n': 4, 'cvar_alpha': 0.9148967112755118, 'cov_window': 170, 'turnover_lambda': 0.005280824909659249, 'hybrid_beta': 0.0}. Best is trial 59 with value: 1.9436470018969516.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 32.17it/s]
+[I 2026-02-21 21:54:45,716] Trial 60 finished with value: -7.455954854306711 and parameters: {'top_n': 5, 'cvar_alpha': 0.9201616792444305, 'cov_window': 175, 'turnover_lambda': 0.005060928154160464, 'hybrid_beta': 0.05}. Best is trial 59 with value: 1.9436470018969516.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.94it/s]
+[I 2026-02-21 21:54:46,035] Trial 61 finished with value: 0.33654807042401313 and parameters: {'top_n': 4, 'cvar_alpha': 0.906926375691815, 'cov_window': 125, 'turnover_lambda': 0.011463664988668585, 'hybrid_beta': 0.05}. Best is trial 59 with value: 1.9436470018969516.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.90it/s]
+[I 2026-02-21 21:54:46,347] Trial 62 finished with value: 0.06366490147522974 and parameters: {'top_n': 3, 'cvar_alpha': 0.9091221065064992, 'cov_window': 180, 'turnover_lambda': 0.01127830453244074, 'hybrid_beta': 0.0}. Best is trial 59 with value: 1.9436470018969516.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.53it/s]
+[I 2026-02-21 21:54:46,673] Trial 63 finished with value: 1.8422766380171256 and parameters: {'top_n': 4, 'cvar_alpha': 0.9183703422344337, 'cov_window': 170, 'turnover_lambda': 0.0028258290183977644, 'hybrid_beta': 0.0}. Best is trial 59 with value: 1.9436470018969516.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.80it/s]
+[I 2026-02-21 21:54:46,997] Trial 64 finished with value: -0.32341696641244866 and parameters: {'top_n': 4, 'cvar_alpha': 0.9288762320163202, 'cov_window': 140, 'turnover_lambda': 0.0025326731999626042, 'hybrid_beta': 0.05}. Best is trial 59 with value: 1.9436470018969516.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.54it/s]
+[I 2026-02-21 21:54:47,303] Trial 65 finished with value: 0.31563712086979456 and parameters: {'top_n': 4, 'cvar_alpha': 0.9109673640552264, 'cov_window': 95, 'turnover_lambda': 0.016279083460907413, 'hybrid_beta': 0.0}. Best is trial 59 with value: 1.9436470018969516.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.51it/s]
+[I 2026-02-21 21:54:47,632] Trial 66 finished with value: 0.3408209701501168 and parameters: {'top_n': 4, 'cvar_alpha': 0.9069930628485441, 'cov_window': 165, 'turnover_lambda': 0.004548547827574019, 'hybrid_beta': 0.05}. Best is trial 59 with value: 1.9436470018969516.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.03it/s]
+[I 2026-02-21 21:54:47,897] Trial 67 finished with value: 0.09358071496980802 and parameters: {'top_n': 3, 'cvar_alpha': 0.9105663946850396, 'cov_window': 85, 'turnover_lambda': 0.020502182793507993, 'hybrid_beta': 0.5}. Best is trial 59 with value: 1.9436470018969516.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 10.83it/s]
+[I 2026-02-21 21:54:48,292] Trial 68 finished with value: 1.9845560825796427 and parameters: {'top_n': 4, 'cvar_alpha': 0.9119155908274267, 'cov_window': 130, 'turnover_lambda': 0.005454934462900916, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 29.99it/s]
+[I 2026-02-21 21:54:48,658] Trial 69 finished with value: -8.094351268785559 and parameters: {'top_n': 5, 'cvar_alpha': 0.9234877793435302, 'cov_window': 125, 'turnover_lambda': 0.010033681060356134, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.95it/s]
+[I 2026-02-21 21:54:48,992] Trial 70 finished with value: 0.08469187972021741 and parameters: {'top_n': 3, 'cvar_alpha': 0.9323136123065906, 'cov_window': 175, 'turnover_lambda': 0.008526037015861028, 'hybrid_beta': 0.6}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.82it/s]
+[I 2026-02-21 21:54:49,414] Trial 71 finished with value: 1.827474048656764 and parameters: {'top_n': 4, 'cvar_alpha': 0.9146534940884855, 'cov_window': 120, 'turnover_lambda': 0.006440193924318269, 'hybrid_beta': 0.05}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 34.42it/s]
+[I 2026-02-21 21:54:49,723] Trial 72 finished with value: -6.871524524879167 and parameters: {'top_n': 4, 'cvar_alpha': 0.9434393660612985, 'cov_window': 85, 'turnover_lambda': 0.025330470427854038, 'hybrid_beta': 0.2}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 34.98it/s]
+[I 2026-02-21 21:54:50,345] Trial 73 finished with value: 1.9357111087073127 and parameters: {'top_n': 4, 'cvar_alpha': 0.918251595983901, 'cov_window': 150, 'turnover_lambda': 0.005579505518702956, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 40.03it/s]
+[I 2026-02-21 21:54:50,647] Trial 74 finished with value: 0.07228629808556697 and parameters: {'top_n': 3, 'cvar_alpha': 0.9400822234065523, 'cov_window': 155, 'turnover_lambda': 0.005933362253525547, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 24.09it/s]
+[I 2026-02-21 21:54:51,066] Trial 75 finished with value: -8.759813258166865 and parameters: {'top_n': 7, 'cvar_alpha': 0.9018429302763603, 'cov_window': 105, 'turnover_lambda': 0.0020319422485378545, 'hybrid_beta': 0.4}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.92it/s]
+[I 2026-02-21 21:54:51,454] Trial 76 finished with value: 0.058258751164841804 and parameters: {'top_n': 3, 'cvar_alpha': 0.9186066524123359, 'cov_window': 150, 'turnover_lambda': 0.008709452291210366, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 34.41it/s]
+[I 2026-02-21 21:54:51,841] Trial 77 finished with value: 1.904845741403084 and parameters: {'top_n': 4, 'cvar_alpha': 0.9135564891604262, 'cov_window': 155, 'turnover_lambda': 0.005958717863489057, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 24.52it/s]
+[I 2026-02-21 21:54:52,279] Trial 78 finished with value: -7.144563116104837 and parameters: {'top_n': 7, 'cvar_alpha': 0.935615485302237, 'cov_window': 90, 'turnover_lambda': 0.002538042920653707, 'hybrid_beta': 0.25}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.15it/s]
+[I 2026-02-21 21:54:52,631] Trial 79 finished with value: 1.9543016687966188 and parameters: {'top_n': 4, 'cvar_alpha': 0.9224510092308092, 'cov_window': 155, 'turnover_lambda': 0.005835933817971124, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.58it/s]
+[I 2026-02-21 21:54:52,964] Trial 80 finished with value: -3.386330532919545 and parameters: {'top_n': 4, 'cvar_alpha': 0.9303078075975866, 'cov_window': 170, 'turnover_lambda': 0.009996695269145825, 'hybrid_beta': 0.1}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 31.05it/s]
+[I 2026-02-21 21:54:53,339] Trial 81 finished with value: -6.491550911054941 and parameters: {'top_n': 5, 'cvar_alpha': 0.9316824378031147, 'cov_window': 145, 'turnover_lambda': 0.004593149150500003, 'hybrid_beta': 0.2}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.82it/s]
+[I 2026-02-21 21:54:53,662] Trial 82 finished with value: 1.923634915429459 and parameters: {'top_n': 4, 'cvar_alpha': 0.9155041608221234, 'cov_window': 155, 'turnover_lambda': 0.005869685934066319, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 28.49it/s]
+[I 2026-02-21 21:54:54,041] Trial 83 finished with value: 1.4535123753633454 and parameters: {'top_n': 6, 'cvar_alpha': 0.942940875906803, 'cov_window': 135, 'turnover_lambda': 0.012083626307132197, 'hybrid_beta': 0.6}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.67it/s]
+[I 2026-02-21 21:54:54,362] Trial 84 finished with value: 1.9564074834468614 and parameters: {'top_n': 4, 'cvar_alpha': 0.93023816494159, 'cov_window': 150, 'turnover_lambda': 0.005715599068625144, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 40.19it/s]
+[I 2026-02-21 21:54:54,676] Trial 85 finished with value: 1.9273579848692224 and parameters: {'top_n': 4, 'cvar_alpha': 0.9269358716702767, 'cov_window': 145, 'turnover_lambda': 0.006351598773794028, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.96it/s]
+[I 2026-02-21 21:54:54,997] Trial 86 finished with value: 1.877170900302052 and parameters: {'top_n': 4, 'cvar_alpha': 0.9316135220474505, 'cov_window': 150, 'turnover_lambda': 0.006406123624948975, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.65it/s]
+[I 2026-02-21 21:54:55,330] Trial 87 finished with value: 1.798460055486102 and parameters: {'top_n': 4, 'cvar_alpha': 0.915315582359256, 'cov_window': 155, 'turnover_lambda': 0.0068525708463048314, 'hybrid_beta': 0.2}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.38it/s]
+[I 2026-02-21 21:54:55,662] Trial 88 finished with value: 1.8997464680733172 and parameters: {'top_n': 4, 'cvar_alpha': 0.9312160942451494, 'cov_window': 180, 'turnover_lambda': 0.005545434199488822, 'hybrid_beta': 0.05}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 32.15it/s]
+[I 2026-02-21 21:54:56,011] Trial 89 finished with value: -6.349896882909709 and parameters: {'top_n': 5, 'cvar_alpha': 0.9320300270241861, 'cov_window': 145, 'turnover_lambda': 0.005076443968799243, 'hybrid_beta': 0.05}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 40.34it/s]
+[I 2026-02-21 21:54:56,329] Trial 90 finished with value: 1.9018780049639503 and parameters: {'top_n': 4, 'cvar_alpha': 0.9174318074769271, 'cov_window': 145, 'turnover_lambda': 0.008393707709632063, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 43.24it/s]
+[I 2026-02-21 21:54:56,614] Trial 91 finished with value: 0.06872534118936979 and parameters: {'top_n': 3, 'cvar_alpha': 0.9185909121536447, 'cov_window': 165, 'turnover_lambda': 0.0061986590133883005, 'hybrid_beta': 0.0}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.33it/s]
+[I 2026-02-21 21:54:56,930] Trial 92 finished with value: 1.9104539723390137 and parameters: {'top_n': 4, 'cvar_alpha': 0.9342636097743824, 'cov_window': 130, 'turnover_lambda': 0.006018230480090348, 'hybrid_beta': 0.1}. Best is trial 68 with value: 1.9845560825796427.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.97it/s]
+[I 2026-02-21 21:54:57,250] Trial 93 finished with value: 2.010588059896244 and parameters: {'top_n': 4, 'cvar_alpha': 0.9260660886912554, 'cov_window': 160, 'turnover_lambda': 0.004548918456979471, 'hybrid_beta': 0.0}. Best is trial 93 with value: 2.010588059896244.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.55it/s]
+[I 2026-02-21 21:54:57,570] Trial 94 finished with value: 1.8427874482364055 and parameters: {'top_n': 4, 'cvar_alpha': 0.9253251385697973, 'cov_window': 150, 'turnover_lambda': 0.006261571825501373, 'hybrid_beta': 0.15000000000000002}. Best is trial 93 with value: 2.010588059896244.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.59it/s]
+[I 2026-02-21 21:54:57,850] Trial 95 finished with value: 0.07503390851282665 and parameters: {'top_n': 3, 'cvar_alpha': 0.9271766233492091, 'cov_window': 150, 'turnover_lambda': 0.006207094368731115, 'hybrid_beta': 0.0}. Best is trial 93 with value: 2.010588059896244.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.83it/s]
+[I 2026-02-21 21:54:58,171] Trial 96 finished with value: 1.8899361907759762 and parameters: {'top_n': 4, 'cvar_alpha': 0.927356824556703, 'cov_window': 170, 'turnover_lambda': 0.0057657231062521975, 'hybrid_beta': 0.0}. Best is trial 93 with value: 2.010588059896244.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 40.44it/s]
+[I 2026-02-21 21:54:58,486] Trial 97 finished with value: 1.9768441896034992 and parameters: {'top_n': 4, 'cvar_alpha': 0.9200712540702626, 'cov_window': 145, 'turnover_lambda': 0.006781647599037674, 'hybrid_beta': 0.0}. Best is trial 93 with value: 2.010588059896244.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.60it/s]
+[I 2026-02-21 21:54:58,804] Trial 98 finished with value: 1.7695270889339687 and parameters: {'top_n': 4, 'cvar_alpha': 0.9371107025048752, 'cov_window': 155, 'turnover_lambda': 0.0034397537498981954, 'hybrid_beta': 0.0}. Best is trial 93 with value: 2.010588059896244.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 27.26it/s]
+[I 2026-02-21 21:54:59,199] Trial 99 finished with value: -6.554937513570467 and parameters: {'top_n': 7, 'cvar_alpha': 0.9480592908516946, 'cov_window': 150, 'turnover_lambda': 0.007107384240363172, 'hybrid_beta': 0.25}. Best is trial 93 with value: 2.010588059896244.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.95it/s]
+[I 2026-02-21 21:54:59,517] Trial 100 finished with value: 1.8692605068398795 and parameters: {'top_n': 4, 'cvar_alpha': 0.918919659923585, 'cov_window': 155, 'turnover_lambda': 0.005389673692589385, 'hybrid_beta': 0.0}. Best is trial 93 with value: 2.010588059896244.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.85it/s]
+[I 2026-02-21 21:54:59,836] Trial 101 finished with value: 0.2607474116643771 and parameters: {'top_n': 4, 'cvar_alpha': 0.9007144130331195, 'cov_window': 140, 'turnover_lambda': 0.00899908211695185, 'hybrid_beta': 0.1}. Best is trial 93 with value: 2.010588059896244.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.50it/s]
+[I 2026-02-21 21:55:00,119] Trial 102 finished with value: 0.08422129754910923 and parameters: {'top_n': 3, 'cvar_alpha': 0.9068243717482881, 'cov_window': 155, 'turnover_lambda': 0.018202384312273053, 'hybrid_beta': 0.5}. Best is trial 93 with value: 2.010588059896244.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.71it/s]
+[I 2026-02-21 21:55:00,437] Trial 103 finished with value: 2.013806105871583 and parameters: {'top_n': 4, 'cvar_alpha': 0.9239937198030355, 'cov_window': 160, 'turnover_lambda': 0.006008072438237682, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.49it/s]
+[I 2026-02-21 21:55:00,774] Trial 104 finished with value: -10.155991245118994 and parameters: {'top_n': 5, 'cvar_alpha': 0.9158762511551424, 'cov_window': 160, 'turnover_lambda': 0.006372445089662111, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 40.81it/s]
+[I 2026-02-21 21:55:01,038] Trial 105 finished with value: 0.10018718886210243 and parameters: {'top_n': 3, 'cvar_alpha': 0.9412783785181856, 'cov_window': 85, 'turnover_lambda': 0.009738190514528693, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.43it/s]
+[I 2026-02-21 21:55:01,373] Trial 106 finished with value: 1.9844960773171343 and parameters: {'top_n': 4, 'cvar_alpha': 0.9231937409001068, 'cov_window': 140, 'turnover_lambda': 0.004219220865638562, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.54it/s]
+[I 2026-02-21 21:55:01,697] Trial 107 finished with value: 1.8664596761599017 and parameters: {'top_n': 4, 'cvar_alpha': 0.9231307735834876, 'cov_window': 155, 'turnover_lambda': 0.004496614114666973, 'hybrid_beta': 0.05}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.00it/s]
+[I 2026-02-21 21:55:02,018] Trial 108 finished with value: -3.2845945084140875 and parameters: {'top_n': 4, 'cvar_alpha': 0.9203559455569116, 'cov_window': 140, 'turnover_lambda': 0.008601794514933406, 'hybrid_beta': 0.05}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.48it/s]
+[I 2026-02-21 21:55:02,328] Trial 109 finished with value: 1.9799780803385534 and parameters: {'top_n': 4, 'cvar_alpha': 0.9314320018582138, 'cov_window': 115, 'turnover_lambda': 0.005342050828067311, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.93it/s]
+[I 2026-02-21 21:55:02,634] Trial 110 finished with value: 1.9409588479606688 and parameters: {'top_n': 4, 'cvar_alpha': 0.9288673011100844, 'cov_window': 115, 'turnover_lambda': 0.004602042112895979, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 32.33it/s]
+[I 2026-02-21 21:55:02,966] Trial 111 finished with value: -10.148365037802865 and parameters: {'top_n': 5, 'cvar_alpha': 0.9417719922749641, 'cov_window': 105, 'turnover_lambda': 0.004015968553815739, 'hybrid_beta': 0.05}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.91it/s]
+[I 2026-02-21 21:55:03,245] Trial 112 finished with value: 0.07191369366846834 and parameters: {'top_n': 3, 'cvar_alpha': 0.9011415240210343, 'cov_window': 105, 'turnover_lambda': 0.0020693958875336567, 'hybrid_beta': 0.55}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.87it/s]
+[I 2026-02-21 21:55:03,570] Trial 113 finished with value: 0.2301352485924053 and parameters: {'top_n': 4, 'cvar_alpha': 0.9347033629815699, 'cov_window': 115, 'turnover_lambda': 0.003376296167968316, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.75it/s]
+[I 2026-02-21 21:55:03,877] Trial 114 finished with value: 1.9574332151074 and parameters: {'top_n': 4, 'cvar_alpha': 0.9289787421736342, 'cov_window': 110, 'turnover_lambda': 0.005284856052568098, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 35.71it/s]
+[I 2026-02-21 21:55:04,278] Trial 115 finished with value: 0.31596086072246754 and parameters: {'top_n': 4, 'cvar_alpha': 0.9229993140665586, 'cov_window': 105, 'turnover_lambda': 0.004291182196423235, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 32.42it/s]
+[I 2026-02-21 21:55:04,634] Trial 116 finished with value: -6.810606541320707 and parameters: {'top_n': 5, 'cvar_alpha': 0.9259242206554434, 'cov_window': 100, 'turnover_lambda': 0.007605275032450437, 'hybrid_beta': 0.05}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 29.62it/s]
+[I 2026-02-21 21:55:05,008] Trial 117 finished with value: 1.4912644153694892 and parameters: {'top_n': 6, 'cvar_alpha': 0.9110998428946728, 'cov_window': 165, 'turnover_lambda': 0.009110459870236612, 'hybrid_beta': 0.6}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.96it/s]
+[I 2026-02-21 21:55:05,317] Trial 118 finished with value: 1.8208824690443244 and parameters: {'top_n': 4, 'cvar_alpha': 0.9343817200931023, 'cov_window': 110, 'turnover_lambda': 0.005536361356564493, 'hybrid_beta': 0.1}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 32.21it/s]
+[I 2026-02-21 21:55:05,662] Trial 119 finished with value: -0.5395224955582572 and parameters: {'top_n': 5, 'cvar_alpha': 0.950472318303815, 'cov_window': 180, 'turnover_lambda': 0.011856976392046286, 'hybrid_beta': 0.6}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.76it/s]
+[I 2026-02-21 21:55:05,973] Trial 120 finished with value: -5.73418178893498 and parameters: {'top_n': 4, 'cvar_alpha': 0.9519035638897684, 'cov_window': 120, 'turnover_lambda': 0.009248505592172957, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.26it/s]
+[I 2026-02-21 21:55:06,306] Trial 121 finished with value: -10.532647670546668 and parameters: {'top_n': 5, 'cvar_alpha': 0.9224882489930438, 'cov_window': 125, 'turnover_lambda': 0.005210073694858669, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 37.54it/s]
+[I 2026-02-21 21:55:06,646] Trial 122 finished with value: -7.281764391048823 and parameters: {'top_n': 5, 'cvar_alpha': 0.9244084810716655, 'cov_window': 140, 'turnover_lambda': 0.0036319100731341384, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.27it/s]
+[I 2026-02-21 21:55:06,980] Trial 123 finished with value: 1.8003230495459994 and parameters: {'top_n': 4, 'cvar_alpha': 0.9315054430321091, 'cov_window': 115, 'turnover_lambda': 0.00437504076745758, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 41.22it/s]
+[I 2026-02-21 21:55:07,272] Trial 124 finished with value: 0.07954776190210389 and parameters: {'top_n': 3, 'cvar_alpha': 0.9242227730113134, 'cov_window': 120, 'turnover_lambda': 0.004542688094371306, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 27.29it/s]
+[I 2026-02-21 21:55:07,661] Trial 125 finished with value: -6.789192127462016 and parameters: {'top_n': 7, 'cvar_alpha': 0.9132831418671283, 'cov_window': 100, 'turnover_lambda': 0.004835005424224829, 'hybrid_beta': 0.6}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 33.18it/s]
+[I 2026-02-21 21:55:08,010] Trial 126 finished with value: -8.803925418151259 and parameters: {'top_n': 5, 'cvar_alpha': 0.9195069807695365, 'cov_window': 170, 'turnover_lambda': 0.019945182600398816, 'hybrid_beta': 0.1}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 27.48it/s]
+[I 2026-02-21 21:55:08,393] Trial 127 finished with value: -6.781047320647507 and parameters: {'top_n': 7, 'cvar_alpha': 0.9571058933311509, 'cov_window': 110, 'turnover_lambda': 0.0058205760628245356, 'hybrid_beta': 0.55}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 40.46it/s]
+[I 2026-02-21 21:55:08,720] Trial 128 finished with value: 0.05767249381933137 and parameters: {'top_n': 3, 'cvar_alpha': 0.9265030076678692, 'cov_window': 155, 'turnover_lambda': 0.0033754921729463884, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.55it/s]
+[I 2026-02-21 21:55:09,090] Trial 129 finished with value: 1.927384157963908 and parameters: {'top_n': 4, 'cvar_alpha': 0.9349860697954963, 'cov_window': 135, 'turnover_lambda': 0.004650736574711425, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.11it/s]
+[I 2026-02-21 21:55:09,398] Trial 130 finished with value: 1.9204901431759036 and parameters: {'top_n': 4, 'cvar_alpha': 0.9286701852915191, 'cov_window': 115, 'turnover_lambda': 0.0060347655071460666, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.79it/s]
+[I 2026-02-21 21:55:09,716] Trial 131 finished with value: 1.756219001138867 and parameters: {'top_n': 4, 'cvar_alpha': 0.938486293901384, 'cov_window': 140, 'turnover_lambda': 0.00413497727987657, 'hybrid_beta': 0.1}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 21.09it/s]
+[I 2026-02-21 21:55:10,703] Trial 132 finished with value: -13.900356497620656 and parameters: {'top_n': 7, 'cvar_alpha': 0.907415431440825, 'cov_window': 155, 'turnover_lambda': 0.017180202674415057, 'hybrid_beta': 0.05}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 35.49it/s]
+[I 2026-02-21 21:55:11,030] Trial 133 finished with value: 0.08422670604270621 and parameters: {'top_n': 3, 'cvar_alpha': 0.9366556693452104, 'cov_window': 125, 'turnover_lambda': 0.0024196278485548936, 'hybrid_beta': 0.35000000000000003}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.78it/s]
+[I 2026-02-21 21:55:11,341] Trial 134 finished with value: 0.0987255648556915 and parameters: {'top_n': 3, 'cvar_alpha': 0.9341013493423084, 'cov_window': 120, 'turnover_lambda': 0.011865959836126577, 'hybrid_beta': 0.25}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.77it/s]
+[I 2026-02-21 21:55:11,670] Trial 135 finished with value: 1.8869793908636283 and parameters: {'top_n': 4, 'cvar_alpha': 0.9274876164214062, 'cov_window': 145, 'turnover_lambda': 0.0033838138582318257, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.69it/s]
+[I 2026-02-21 21:55:11,990] Trial 136 finished with value: 1.9731113812803287 and parameters: {'top_n': 4, 'cvar_alpha': 0.9170042609252048, 'cov_window': 135, 'turnover_lambda': 0.00446758404478861, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.67it/s]
+[I 2026-02-21 21:55:12,329] Trial 137 finished with value: -10.763629407319355 and parameters: {'top_n': 5, 'cvar_alpha': 0.9079883602938524, 'cov_window': 135, 'turnover_lambda': 0.004742959113780006, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 42.84it/s]
+[I 2026-02-21 21:55:12,619] Trial 138 finished with value: 0.076310256667667 and parameters: {'top_n': 3, 'cvar_alpha': 0.908609612051763, 'cov_window': 180, 'turnover_lambda': 0.004330370105914243, 'hybrid_beta': 0.05}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 36.71it/s]
+[I 2026-02-21 21:55:12,952] Trial 139 finished with value: 1.9128451475061887 and parameters: {'top_n': 4, 'cvar_alpha': 0.9153155496607698, 'cov_window': 125, 'turnover_lambda': 0.003453282645738393, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.51it/s]
+[I 2026-02-21 21:55:13,281] Trial 140 finished with value: 1.9236104400847402 and parameters: {'top_n': 4, 'cvar_alpha': 0.9095012422520662, 'cov_window': 180, 'turnover_lambda': 0.006024497059087797, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 38.24it/s]
+[I 2026-02-21 21:55:13,602] Trial 141 finished with value: 1.9718441493818641 and parameters: {'top_n': 4, 'cvar_alpha': 0.9183983634670543, 'cov_window': 140, 'turnover_lambda': 0.0058701052292765565, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.75it/s]
+[I 2026-02-21 21:55:13,893] Trial 142 finished with value: 0.06900958991299122 and parameters: {'top_n': 3, 'cvar_alpha': 0.9174801369675, 'cov_window': 140, 'turnover_lambda': 0.003908291874634299, 'hybrid_beta': 0.1}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.04it/s]
+[I 2026-02-21 21:55:14,225] Trial 143 finished with value: 1.9422014441991695 and parameters: {'top_n': 4, 'cvar_alpha': 0.9146428843669302, 'cov_window': 145, 'turnover_lambda': 0.005126071018198686, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 39.40it/s]
+[I 2026-02-21 21:55:14,560] Trial 144 finished with value: -7.118026345058977 and parameters: {'top_n': 5, 'cvar_alpha': 0.9193909659981355, 'cov_window': 150, 'turnover_lambda': 0.0048014216231908454, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 21.90it/s]
+[I 2026-02-21 21:55:15,022] Trial 145 finished with value: 1.9588021983514194 and parameters: {'top_n': 4, 'cvar_alpha': 0.9204335852949203, 'cov_window': 130, 'turnover_lambda': 0.005632958978668525, 'hybrid_beta': 0.05}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 26.26it/s]
+[I 2026-02-21 21:55:15,471] Trial 146 finished with value: 0.07901128754403475 and parameters: {'top_n': 3, 'cvar_alpha': 0.9105582005483613, 'cov_window': 135, 'turnover_lambda': 0.004752817868412814, 'hybrid_beta': 0.05}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 23.95it/s]
+[I 2026-02-21 21:55:15,976] Trial 147 finished with value: 1.952941049435115 and parameters: {'top_n': 4, 'cvar_alpha': 0.9189750039330671, 'cov_window': 135, 'turnover_lambda': 0.005062479307209748, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 24.43it/s]
+[I 2026-02-21 21:55:16,482] Trial 148 finished with value: 1.918650727538876 and parameters: {'top_n': 4, 'cvar_alpha': 0.9222290181329603, 'cov_window': 150, 'turnover_lambda': 0.0054832602723895495, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 12.91it/s]
+[I 2026-02-21 22:42:00,670] Trial 149 finished with value: -6.054558343732162 and parameters: {'top_n': 5, 'cvar_alpha': 0.9350301101037248, 'cov_window': 125, 'turnover_lambda': 0.004084103003550354, 'hybrid_beta': 0.6}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00,  8.64it/s]100%|██████████| 1/1 [00:00<00:00,  8.62it/s]
+[I 2026-02-21 22:42:01,821] Trial 150 finished with value: -9.25446498340959 and parameters: {'top_n': 5, 'cvar_alpha': 0.914429615928572, 'cov_window': 135, 'turnover_lambda': 0.007328494020493955, 'hybrid_beta': 0.1}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 15.51it/s]
+[I 2026-02-21 22:42:02,558] Trial 151 finished with value: -0.3110162249734971 and parameters: {'top_n': 4, 'cvar_alpha': 0.9258083022444987, 'cov_window': 115, 'turnover_lambda': 0.0035450682565060817, 'hybrid_beta': 0.15000000000000002}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 20.19it/s]
+[I 2026-02-21 22:42:03,177] Trial 152 finished with value: 1.9010329767261132 and parameters: {'top_n': 4, 'cvar_alpha': 0.9200734498491163, 'cov_window': 125, 'turnover_lambda': 0.005122847174961915, 'hybrid_beta': 0.15000000000000002}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 22.54it/s]
+[I 2026-02-21 22:42:03,702] Trial 153 finished with value: 1.9342655637055075 and parameters: {'top_n': 4, 'cvar_alpha': 0.9201562548589334, 'cov_window': 145, 'turnover_lambda': 0.005847630095685779, 'hybrid_beta': 0.05}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 22.50it/s]
+[I 2026-02-21 22:42:04,208] Trial 154 finished with value: -3.3888708381641215 and parameters: {'top_n': 4, 'cvar_alpha': 0.9296502638531178, 'cov_window': 120, 'turnover_lambda': 0.009148476393123491, 'hybrid_beta': 0.1}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 26.61it/s]
+[I 2026-02-21 22:42:04,640] Trial 155 finished with value: 0.08576967863587015 and parameters: {'top_n': 3, 'cvar_alpha': 0.9260519719513106, 'cov_window': 105, 'turnover_lambda': 0.009001975264000529, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 20.29it/s]
+[I 2026-02-21 22:42:05,203] Trial 156 finished with value: -0.5683176264291896 and parameters: {'top_n': 5, 'cvar_alpha': 0.9389430264016865, 'cov_window': 165, 'turnover_lambda': 0.009361294470423115, 'hybrid_beta': 0.05}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 22.29it/s]
+[I 2026-02-21 22:42:05,720] Trial 157 finished with value: 1.9815544570362364 and parameters: {'top_n': 4, 'cvar_alpha': 0.9202759604708961, 'cov_window': 130, 'turnover_lambda': 0.00640591873330253, 'hybrid_beta': 0.05}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 24.18it/s]
+[I 2026-02-21 22:42:06,221] Trial 158 finished with value: 1.9594037090298584 and parameters: {'top_n': 4, 'cvar_alpha': 0.9239089165137189, 'cov_window': 140, 'turnover_lambda': 0.00504235493746462, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 24.32it/s]
+[I 2026-02-21 22:42:06,728] Trial 159 finished with value: -5.0474004114664135 and parameters: {'top_n': 4, 'cvar_alpha': 0.9248295468001126, 'cov_window': 140, 'turnover_lambda': 0.009594326141690193, 'hybrid_beta': 0.0}. Best is trial 103 with value: 2.013806105871583.
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 23.96it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00,  5.68it/s]100%|██████████| 1/1 [00:00<00:00,  5.67it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00,  5.56it/s]100%|██████████| 1/1 [00:00<00:00,  5.55it/s]
+============================================================
+固定切分贝叶斯调参摘要
+  训练区间: 2019-11-01 ~ 2020-12-31
+  测试区间: 2021-01-04 ~ 2025-10-30
+  trial 数: 160
+  通过全部规则数: 62
+  最优来源: pass_all_rules
+  测试集 Sharpe 超额 (cand - RP): 0.0048
+  Split 配置: /Users/mac/Desktop/USTC_Financial_Data_Inno_Comp/outputs/cvar_hybrid_bayes_split_20260221_215421/CVAR贝叶斯_split_config.csv
+  Trials 明细: /Users/mac/Desktop/USTC_Financial_Data_Inno_Comp/outputs/cvar_hybrid_bayes_split_20260221_215421/CVAR贝叶斯_trials.csv
+  Top20: /Users/mac/Desktop/USTC_Financial_Data_Inno_Comp/outputs/cvar_hybrid_bayes_split_20260221_215421/CVAR贝叶斯_top20.csv
+  训练集对比: /Users/mac/Desktop/USTC_Financial_Data_Inno_Comp/outputs/cvar_hybrid_bayes_split_20260221_215421/CVAR贝叶斯_训练集对比.csv
+  测试集对比: /Users/mac/Desktop/USTC_Financial_Data_Inno_Comp/outputs/cvar_hybrid_bayes_split_20260221_215421/CVAR贝叶斯_测试集对比.csv
+  摘要: /Users/mac/Desktop/USTC_Financial_Data_Inno_Comp/outputs/cvar_hybrid_bayes_split_20260221_215421/CVAR贝叶斯_摘要.csv
+  最优参数: /Users/mac/Desktop/USTC_Financial_Data_Inno_Comp/outputs/cvar_hybrid_bayes_split_20260221_215421/CVAR贝叶斯_best_params.json
+============================================================

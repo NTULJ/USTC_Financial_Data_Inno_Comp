@@ -23,7 +23,7 @@ BACKTEST_START = "2021-01-04"          # 回测起始日（赛题硬性要求）
 RISK_FREE_RATE = 0.0                   # 无风险利率（赛题要求 0%）
 TRANSACTION_COST = 2.5 / 10000         # 交易手续费 万分之2.5
 REBALANCE_FREQ = "W"                   # 调仓频率：周度
-TOP_N = 5                              # 每期选取 Top N 只 ETF（≥3）
+TOP_N = 4                              # 每期选取 Top N 只 ETF（≥3）
 MAX_SINGLE_WEIGHT = 0.35               # 单只 ETF 权重上限 35%
 MIN_HOLDINGS = 3                       # 最少持仓数量
 
@@ -56,5 +56,11 @@ COMBINE_METHOD = "icir"                # 合成方法：ic / icir / equal
 COMBINE_ROLLING_WINDOW = 60            # 合成权重的滚动窗口
 
 # ========== 组合优化参数 ==========
-COV_LOOKBACK = 60                      # 协方差矩阵估计窗口
-SHRINKAGE_FACTOR = 0.5                 # Ledoit-Wolf 收缩系数（简化版）
+COV_LOOKBACK = 130                      # 优化窗口（协方差或历史收益场景）
+SHRINKAGE_FACTOR = 0.05                 # Ledoit-Wolf 收缩系数（简化版）
+CVAR_ALPHA = 0.93                      # CVaR 置信水平（尾部比例 = 1 - alpha）
+CVAR_TURNOVER_LAMBDA = 0.004             # CVaR 换手惩罚系数 λ（0 表示关闭）
+HYBRID_BETA = 0.0                     # 混合比例：0=纯CVaR, 1=纯风险平价
+
+# 优化器选择：risk_parity / min_variance / cvar / hybrid_cvar_rp
+OPTIMIZER_METHOD = "hybrid_cvar_rp"

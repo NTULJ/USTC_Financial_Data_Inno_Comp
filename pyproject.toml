@@ -14,6 +14,8 @@ dependencies = [
   "bt",
   "joblib",
   "openpyxl",
+  "matplotlib",
+  "optuna",
 ]
 
 [project.scripts]
@@ -22,6 +24,7 @@ qf-build-library = "qfcomp.pipelines.run_build_library:main"
 qf-task1 = "qfcomp.task_1.pipeline:main"
 qf-task2 = "qfcomp.task_2.pipeline:main"
 qf-task3 = "qfcomp.task_3.pipeline:main"
+qf-cvar-bayes = "qfcomp.pipelines.run_cvar_bayes:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

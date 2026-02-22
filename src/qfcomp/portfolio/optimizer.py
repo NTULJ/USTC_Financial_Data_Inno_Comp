@@ -5,6 +5,8 @@
 提供两类权重生成器：
   1) 最小方差权重
   2) 风险平价权重
+  3) CVaR 最小化权重（条件风险价值）
+  4) CVaR / 风险平价混合权重
 均满足：
   - 无空仓约束：w >= 0
   - 单资产权重上限：max_weight
@@ -15,7 +17,14 @@ import numpy as np
 import pandas as pd
 from scipy import optimize
 
-from qfcomp.config import COV_LOOKBACK, SHRINKAGE_FACTOR, MAX_SINGLE_WEIGHT, MIN_HOLDINGS
+from qfcomp.config import (
+    SHRINKAGE_FACTOR,
+    MAX_SINGLE_WEIGHT,
+    MIN_HOLDINGS,
+    CVAR_ALPHA,
+    CVAR_TURNOVER_LAMBDA,
+    HYBRID_BETA,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +211,159 @@ def risk_parity_weights(cov: pd.DataFrame,
 
 
 # ---------------------------------------------------------------------------
+# CVaR 最小化
+# ---------------------------------------------------------------------------
+
+def cvar_weights(ret_window: pd.DataFrame,
+                 alpha: float = None,
+                 max_weight: float = None,
+                 min_holdings: int = None,
+                 prev_weights: pd.Series = None,
+                 turnover_lambda: float = None) -> pd.Series:
+    """
+    最小化历史场景 CVaR（Rockafellar-Uryasev 线性规划）：
+      min z + (1 / ((1-alpha) * T)) * sum(u_t)
+      s.t. u_t >= loss_t - z, u_t >= 0
+           sum(w)=1, 0<=w<=max_weight
+    其中 loss_t = -(r_t^T w)。
+    """
+    alpha = CVAR_ALPHA if alpha is None else alpha
+    max_weight = MAX_SINGLE_WEIGHT if max_weight is None else max_weight
+    min_holdings = MIN_HOLDINGS if min_holdings is None else min_holdings
+    turnover_lambda = CVAR_TURNOVER_LAMBDA if turnover_lambda is None else turnover_lambda
+
+    if not (0.0 < alpha < 1.0):
+        raise ValueError(f"alpha 必须在 (0,1) 区间内，当前为 {alpha}")
+
+    ret_use = ret_window.dropna(how="all", axis=1).dropna(how="any", axis=0)
+    assets = list(ret_use.columns)
+    t_obs, n = ret_use.shape
+    if n == 0 or t_obs == 0:
+        return pd.Series(dtype=float)
+    if max_weight * n < 1 - 1e-12:
+        raise ValueError(f"不可行约束: n={n}, max_weight={max_weight}, 无法满足 sum(w)=1")
+
+    r = ret_use.to_numpy()
+
+    use_turnover_penalty = (turnover_lambda is not None) and (turnover_lambda > 0) and (prev_weights is not None)
+    if use_turnover_penalty:
+        if isinstance(prev_weights, pd.Series):
+            prev_series = prev_weights
+        else:
+            prev_series = pd.Series(prev_weights)
+        prev = prev_series.reindex(assets).fillna(0.0).to_numpy(dtype=float)
+        prev = np.clip(prev, 0.0, None)
+    else:
+        prev = None
+
+    # 变量顺序（无换手惩罚）: [w_1...w_n, z, u_1...u_T]
+    # 变量顺序（含换手惩罚）: [w_1...w_n, z, u_1...u_T, d+_1...d+_n, d-_1...d-_n]
+    n_var = n + 1 + t_obs + (2 * n if use_turnover_penalty else 0)
+    c = np.zeros(n_var)
+    c[n] = 1.0
+    u_start = n + 1
+    u_end = u_start + t_obs
+    c[u_start:u_end] = 1.0 / ((1.0 - alpha) * t_obs)
+    if use_turnover_penalty:
+        d_plus_start = n + 1 + t_obs
+        d_minus_start = d_plus_start + n
+        c[d_plus_start:d_plus_start + n] = turnover_lambda
+        c[d_minus_start:d_minus_start + n] = turnover_lambda
+
+    # 约束: -r_t @ w - z - u_t <= 0
+    a_ub = np.zeros((t_obs, n_var))
+    a_ub[:, :n] = -r
+    a_ub[:, n] = -1.0
+    a_ub[:, u_start:u_end] = -np.eye(t_obs)
+    b_ub = np.zeros(t_obs)
+
+    # 等式约束:
+    # 1) sum(w)=1
+    # 2) 含换手惩罚时，w_i - prev_i = d+_i - d-_i
+    if use_turnover_penalty:
+        a_eq = np.zeros((1 + n, n_var))
+        a_eq[0, :n] = 1.0
+        b_eq = np.zeros(1 + n)
+        b_eq[0] = 1.0
+        for i in range(n):
+            a_eq[1 + i, i] = 1.0
+            a_eq[1 + i, d_plus_start + i] = -1.0
+            a_eq[1 + i, d_minus_start + i] = 1.0
+            b_eq[1 + i] = prev[i]
+    else:
+        a_eq = np.zeros((1, n_var))
+        a_eq[0, :n] = 1.0
+        b_eq = np.array([1.0])
+
+    bounds = [(0.0, max_weight)] * n + [(None, None)] + [(0.0, None)] * t_obs
+    if use_turnover_penalty:
+        bounds += [(0.0, None)] * (2 * n)
+    res = optimize.linprog(
+        c,
+        A_ub=a_ub,
+        b_ub=b_ub,
+        A_eq=a_eq,
+        b_eq=b_eq,
+        bounds=bounds,
+        method="highs",
+    )
+
+    if not res.success or res.x is None:
+        w = np.ones(n) / n
+    else:
+        w = res.x[:n]
+
+    return _post_process_weights(w, assets, max_weight, min_holdings)
+
+
+def hybrid_cvar_rp_weights(ret_window: pd.DataFrame,
+                           beta: float = None,
+                           alpha: float = None,
+                           max_weight: float = None,
+                           min_holdings: int = None,
+                           shrinkage: float = None,
+                           prev_weights: pd.Series = None,
+                           turnover_lambda: float = None) -> pd.Series:
+    """
+    混合优化器：CVaR + 风险平价（凸组合）。
+      w_final = (1 - beta) * w_cvar + beta * w_rp
+      beta=0 -> 纯 CVaR；beta=1 -> 纯风险平价
+    """
+    beta = HYBRID_BETA if beta is None else beta
+    alpha = CVAR_ALPHA if alpha is None else alpha
+    max_weight = MAX_SINGLE_WEIGHT if max_weight is None else max_weight
+    min_holdings = MIN_HOLDINGS if min_holdings is None else min_holdings
+    shrinkage = SHRINKAGE_FACTOR if shrinkage is None else shrinkage
+    turnover_lambda = CVAR_TURNOVER_LAMBDA if turnover_lambda is None else turnover_lambda
+
+    beta = float(np.clip(beta, 0.0, 1.0))
+
+    ret_use = ret_window.dropna(how="all", axis=1).dropna(how="any", axis=0)
+    assets = list(ret_use.columns)
+    if len(assets) == 0:
+        return pd.Series(dtype=float)
+
+    w_cvar = cvar_weights(
+        ret_use,
+        alpha=alpha,
+        max_weight=max_weight,
+        min_holdings=min_holdings,
+        prev_weights=prev_weights,
+        turnover_lambda=turnover_lambda,
+    ).reindex(assets).fillna(0.0)
+
+    cov = compute_cov_from_returns(ret_use, shrinkage=shrinkage)
+    w_rp = risk_parity_weights(
+        cov,
+        max_weight=max_weight,
+        min_holdings=min_holdings,
+    ).reindex(assets).fillna(0.0)
+
+    w_mix = (1.0 - beta) * w_cvar.to_numpy() + beta * w_rp.to_numpy()
+    return _post_process_weights(w_mix, assets, max_weight=max_weight, min_holdings=min_holdings)
+
+
+# ---------------------------------------------------------------------------
 # 辅助：根据历史收益矩阵计算协方差
 # ---------------------------------------------------------------------------
 
@@ -216,4 +378,6 @@ __all__ = [
     "compute_cov_from_returns",
     "min_variance_weights",
     "risk_parity_weights",
+    "cvar_weights",
+    "hybrid_cvar_rp_weights",
 ]

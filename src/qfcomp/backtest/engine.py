@@ -41,11 +41,16 @@ _ensure_writable_plot_cache_dirs()
 
 from qfcomp.config import (
     BACKTEST_START, TOP_N, MAX_SINGLE_WEIGHT, MIN_HOLDINGS,
-    COV_LOOKBACK, SHRINKAGE_FACTOR, TRANSACTION_COST, OUTPUT_DIR,
+    COV_LOOKBACK, SHRINKAGE_FACTOR, CVAR_ALPHA, CVAR_TURNOVER_LAMBDA, HYBRID_BETA,
+    TRANSACTION_COST, OUTPUT_DIR,
 )
 from qfcomp.data_loader.loader import get_rebalance_dates_from_start
 from qfcomp.portfolio.optimizer import (
-    compute_cov_from_returns, min_variance_weights, risk_parity_weights,
+    compute_cov_from_returns,
+    min_variance_weights,
+    risk_parity_weights,
+    cvar_weights,
+    hybrid_cvar_rp_weights,
 )
 
 
@@ -85,7 +90,8 @@ def build_equal_weight_schedule(composite: pd.DataFrame,
                                 price_matrix: pd.DataFrame,
                                 top_n: int = None,
                                 max_weight: float = None,
-                                min_holdings: int = None) -> dict:
+                                min_holdings: int = None,
+                                rebal_start: Optional[pd.Timestamp] = None) -> dict:
     """
     生成等权调仓计划：{date: pd.Series(weights)}
     每个调仓日选 Top N，等权并满足单资产上限。
@@ -95,7 +101,8 @@ def build_equal_weight_schedule(composite: pd.DataFrame,
     min_holdings = MIN_HOLDINGS if min_holdings is None else min_holdings
 
     schedule = {}
-    rebal_dates = get_rebalance_dates_from_start(price_matrix, BACKTEST_START)
+    start_dt = BACKTEST_START if rebal_start is None else rebal_start
+    rebal_dates = get_rebalance_dates_from_start(price_matrix, start_dt)
     trading_dates = price_matrix.index
     signal_dates = composite.index
 
@@ -126,25 +133,42 @@ def build_optimized_schedule(composite: pd.DataFrame,
                              max_weight: float = None,
                              min_holdings: int = None,
                              cov_window: int = None,
-                             shrinkage: float = None) -> dict:
+                             shrinkage: float = None,
+                             cvar_alpha: float = None,
+                             turnover_lambda: float = None,
+                             hybrid_beta: float = None,
+                             rebal_start: Optional[pd.Timestamp] = None) -> dict:
     """
     生成优化权重调仓计划：{date: pd.Series(weights)}
-    先选 Top N，再用过去 cov_window 日的协方差做优化。
+    先选 Top N，再基于过去 cov_window 日窗口做优化。
+    支持:
+      - risk_parity: 风险平价（协方差）
+      - min_variance: 最小方差（协方差）
+      - cvar: 最小 CVaR（历史收益场景）
+      - hybrid_cvar_rp: CVaR 与风险平价凸组合
     """
     top_n = TOP_N if top_n is None else top_n
     max_weight = MAX_SINGLE_WEIGHT if max_weight is None else max_weight
     min_holdings = MIN_HOLDINGS if min_holdings is None else min_holdings
     cov_window = COV_LOOKBACK if cov_window is None else cov_window
     shrinkage = SHRINKAGE_FACTOR if shrinkage is None else shrinkage
+    cvar_alpha = CVAR_ALPHA if cvar_alpha is None else cvar_alpha
+    turnover_lambda = CVAR_TURNOVER_LAMBDA if turnover_lambda is None else turnover_lambda
+    hybrid_beta = HYBRID_BETA if hybrid_beta is None else hybrid_beta
 
     schedule = {}
-    rebal_dates = get_rebalance_dates_from_start(price_matrix, BACKTEST_START)
+    start_dt = BACKTEST_START if rebal_start is None else rebal_start
+    rebal_dates = get_rebalance_dates_from_start(price_matrix, start_dt)
     returns = price_matrix.pct_change()
     trading_dates = price_matrix.index
     signal_dates = composite.index
 
-    opt_func = risk_parity_weights if optimizer == "risk_parity" else min_variance_weights
+    optimizer = optimizer.lower().strip()
+    valid_optimizers = {"risk_parity", "min_variance", "cvar", "hybrid_cvar_rp"}
+    if optimizer not in valid_optimizers:
+        raise ValueError(f"未知优化器: {optimizer}，可选: {sorted(valid_optimizers)}")
 
+    prev_weights = None
     for dt in rebal_dates:
         # 避免使用调仓日收盘价构建当日信号：改用前一交易日信号
         signal_dt = _previous_trading_date(trading_dates, dt)
@@ -164,13 +188,37 @@ def build_optimized_schedule(composite: pd.DataFrame,
         if ret_win.shape[0] < max(20, min_holdings):
             continue
 
-        cov = compute_cov_from_returns(ret_win, shrinkage)
-        weights = opt_func(cov, max_weight=max_weight, min_holdings=min_holdings)
+        if optimizer == "cvar":
+            weights = cvar_weights(
+                ret_win,
+                alpha=cvar_alpha,
+                max_weight=max_weight,
+                min_holdings=min_holdings,
+                prev_weights=prev_weights,
+                turnover_lambda=turnover_lambda,
+            )
+        elif optimizer == "hybrid_cvar_rp":
+            weights = hybrid_cvar_rp_weights(
+                ret_win,
+                beta=hybrid_beta,
+                alpha=cvar_alpha,
+                max_weight=max_weight,
+                min_holdings=min_holdings,
+                shrinkage=shrinkage,
+                prev_weights=prev_weights,
+                turnover_lambda=turnover_lambda,
+            )
+        else:
+            cov = compute_cov_from_returns(ret_win, shrinkage)
+            opt_func = risk_parity_weights if optimizer == "risk_parity" else min_variance_weights
+            weights = opt_func(cov, max_weight=max_weight, min_holdings=min_holdings)
+
         weights = weights.dropna()
         weights = weights[weights > 0]
         if len(weights) < min_holdings:
             continue
         schedule[dt] = weights
+        prev_weights = weights
 
     return schedule
 

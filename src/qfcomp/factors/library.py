@@ -15,7 +15,7 @@ from scipy import stats
 DATA_DIR = Path(__file__).resolve().parent / "data"
 try:
     # 优先使用项目统一配置路径，避免包内相对路径失配。
-    from qfcomp.config import DATA_DIR as CONFIG_DATA_DIR  # type: ignore
+    from qfcomp.config import DATA_DIR as CONFIG_DATA_DIR  
     DATA_DIR = CONFIG_DATA_DIR
 except Exception:
     pass
