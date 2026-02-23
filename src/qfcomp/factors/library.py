@@ -611,6 +611,79 @@ def factor_H01_volume_price_divergence(price: pd.DataFrame, window: int = 20) ->
     return pd.Series(out, index=price.index, name="H01")
 
 
+# ---------- K 系列 ----------
+
+def factor_K02_high_gravity_field(price: pd.DataFrame, window: int = 20) -> pd.Series:
+    """高点引力场: window - ts_argmax(high, window) - 1
+
+    取值可解释为“距离窗口最高点的天数”：
+    - 0：今日为窗口最高点
+    - 越大：距离最高点越久
+    """
+    argmax_idx = price.groupby("sec")["high"].transform(
+        lambda x: x.rolling(window).apply(np.argmax, raw=True)
+    )
+    out = window - argmax_idx - 1
+    out.name = "K02"
+    return out
+
+
+def factor_K04_relative_ts_rank(price: pd.DataFrame, window: int = 20) -> pd.Series:
+    """相对时序分位数: ts_rank(volume, window)"""
+    out = price.groupby("sec")["volume"].transform(
+        lambda x: x.rolling(window).rank(pct=True)
+    )
+    out.name = "K04"
+    return out
+
+
+# ---------- M 系列 ----------
+
+def factor_M01_intraday_overnight_game(price: pd.DataFrame) -> pd.Series:
+    """日内与隔夜博弈差:
+    (open / shift(close, 1) - 1) - (close / open - 1)
+    """
+    prev_close = price.groupby("sec")["close"].shift(1)
+    overnight = price["open"] / prev_close.replace(0, np.nan) - 1
+    intraday = price["close"] / price["open"].replace(0, np.nan) - 1
+    out = overnight - intraday
+    out.name = "M01"
+    return out
+
+
+def factor_M03_abs_buy_sell_pressure_imbalance(price: pd.DataFrame, window: int = 20) -> pd.Series:
+    """绝对买卖压失衡:
+    ts_sum(IF(close > shift(close, 1), volume, 0), window) /
+    ts_sum(IF(close < shift(close, 1), volume, 0), window)
+    """
+    prev_close = price.groupby("sec")["close"].shift(1)
+    up_vol = np.where(price["close"] > prev_close, price["volume"], 0.0)
+    down_vol = np.where(price["close"] < prev_close, price["volume"], 0.0)
+
+    up_sum = pd.Series(up_vol, index=price.index).groupby(price["sec"]).transform(
+        lambda x: x.rolling(window).sum()
+    )
+    down_sum = pd.Series(down_vol, index=price.index).groupby(price["sec"]).transform(
+        lambda x: x.rolling(window).sum()
+    )
+    out = up_sum / down_sum.replace(0, np.nan)
+    out.name = "M03"
+    return out
+
+
+# ---------- N 系列 ----------
+
+def factor_N01_pure_idio_momentum(price: pd.DataFrame, window: int = 20) -> pd.Series:
+    """纯特质性动量:
+    (close / shift(close, window) - 1) - cross_mean(close / shift(close, window) - 1)
+    """
+    ret_n = price.groupby("sec")["close"].transform(lambda x: x / x.shift(window) - 1)
+    cross_mean = ret_n.groupby(price["date"]).transform("mean")
+    out = ret_n - cross_mean
+    out.name = "N01"
+    return out
+
+
 # ---------- 统一接口 ----------
 
 # 量价表必备列，其余列为宏观
@@ -684,6 +757,11 @@ def compute_all_factors(
     panel_factors["E01"] = factor_E01_skew(price)
     panel_factors["E02"] = factor_E02_kurt(price)
     panel_factors["H01"] = factor_H01_volume_price_divergence(price)
+    panel_factors["K02"] = factor_K02_high_gravity_field(price)
+    panel_factors["K04"] = factor_K04_relative_ts_rank(price)
+    panel_factors["M01"] = factor_M01_intraday_overnight_game(price)
+    panel_factors["M03"] = factor_M03_abs_buy_sell_pressure_imbalance(price)
+    panel_factors["N01"] = factor_N01_pure_idio_momentum(price)
     panel_factors["T01"] = factor_T01_turnover(price, product_pool=product_pool, data_dir=data_dir)
     panel_factors["ret_1"] = factor_ret_1(price)
     panel_factors["ret_5"] = factor_ret_5(price)

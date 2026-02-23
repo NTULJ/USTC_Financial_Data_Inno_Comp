@@ -64,6 +64,50 @@ def _sigmoid(x: np.ndarray, k: float = None) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-k * x))
 
 
+def _calc_stress_score(
+    macro_df: pd.DataFrame,
+    stress_factors: tuple[str, ...],
+    smooth_window: int = 5,
+) -> pd.Series:
+    """
+    计算风险压力分数（越高表示越不宜提仓）。
+
+    当前默认使用 F01/F02/F04 的等权均值，并做滚动平滑。
+    """
+    cols = [c for c in stress_factors if c in macro_df.columns]
+    if not cols:
+        return pd.Series(0.0, index=macro_df.index, name="stress_score")
+    stress = macro_df[cols].mean(axis=1).rolling(smooth_window, min_periods=1).mean()
+    stress.name = "stress_score"
+    return stress
+
+
+def _limit_position_step(
+    position_scale: pd.Series,
+    max_daily_step: float,
+    min_scale: float,
+    max_scale: float,
+) -> pd.Series:
+    """
+    对仓位系数做时间维度限速，抑制仓位日度突变。
+    """
+    if position_scale.empty:
+        return position_scale
+    step = float(max_daily_step)
+    if step <= 0:
+        return position_scale
+
+    arr = position_scale.to_numpy(dtype=float).copy()
+    for i in range(1, len(arr)):
+        delta = arr[i] - arr[i - 1]
+        if delta > step:
+            arr[i] = arr[i - 1] + step
+        elif delta < -step:
+            arr[i] = arr[i - 1] - step
+    arr = np.clip(arr, min_scale, max_scale)
+    return pd.Series(arr, index=position_scale.index, name=position_scale.name)
+
+
 def calc_macro_signals(macro_df: pd.DataFrame,
                        config: dict = None,
                        smooth_window: int = 5) -> pd.DataFrame:
@@ -109,7 +153,11 @@ def calc_position_scale(macro_df: pd.DataFrame,
                         config: dict = None,
                         smooth_window: int = 5,
                         min_scale: float = None,
-                        max_scale: float = None) -> pd.Series:
+                        max_scale: float = None,
+                        relax_gamma: float = 0.0,
+                        stress_threshold: float | None = None,
+                        max_daily_step: float | None = None,
+                        stress_factors: tuple[str, ...] = ("F01", "F02", "F04")) -> pd.Series:
     """
     计算每日仓位缩放系数 ∈ [min_scale, max_scale]
 
@@ -125,6 +173,16 @@ def calc_position_scale(macro_df: pd.DataFrame,
         最低仓位比例
     max_scale : float
         最高仓位比例
+    relax_gamma : float
+        向满仓线性混合的比例 γ，取值 [0,1]。
+        0 表示不混合（原始 rule-based），1 表示直接满仓。
+    stress_threshold : float | None
+        若不为 None，则仅在 stress_score <= threshold 时允许提仓混合。
+        其中 stress_score 默认是 F01/F02/F04 的平滑均值（越高越风险）。
+    max_daily_step : float | None
+        仓位日度变化上限（例如 0.03 表示单日最多变化 3pct）。
+    stress_factors : tuple[str, ...]
+        压力门控使用的宏观因子列名。
 
     Returns
     -------
@@ -159,10 +217,35 @@ def calc_position_scale(macro_df: pd.DataFrame,
     composite = signals[factor_cols].values @ w
     composite = pd.Series(composite, index=signals.index, name="composite_signal")
 
-    # 线性映射到 [min_scale, max_scale]
-    position_scale = min_scale + (max_scale - min_scale) * composite
-    position_scale.name = "position_scale"
+    # 基础 rule-based 仓位
+    base_scale = min_scale + (max_scale - min_scale) * composite
+    base_scale.name = "position_scale"
 
+    # regime_v2: 对 rule 仓位做“受控提仓”
+    gamma = float(np.clip(relax_gamma, 0.0, 1.0))
+    position_scale = base_scale.copy()
+    if gamma > 0:
+        relaxed_scale = (1.0 - gamma) * base_scale + gamma * max_scale
+        if stress_threshold is None:
+            position_scale = relaxed_scale
+        else:
+            stress = _calc_stress_score(
+                macro_df=macro_df, stress_factors=stress_factors, smooth_window=smooth_window
+            )
+            can_relax = stress <= float(stress_threshold)
+            can_relax = can_relax.reindex(position_scale.index).fillna(False)
+            position_scale = position_scale.where(~can_relax, relaxed_scale)
+
+    if max_daily_step is not None and float(max_daily_step) > 0:
+        position_scale = _limit_position_step(
+            position_scale=position_scale,
+            max_daily_step=float(max_daily_step),
+            min_scale=min_scale,
+            max_scale=max_scale,
+        )
+
+    position_scale = position_scale.clip(lower=min_scale, upper=max_scale)
+    position_scale.name = "position_scale"
     return position_scale
 
 

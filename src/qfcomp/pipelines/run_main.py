@@ -10,6 +10,8 @@
  5) 生成等权 / 优化权重调仓计划
  6) 运行回测，输出绩效摘要与净值序列
 """
+import argparse
+import json
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
@@ -17,7 +19,9 @@ from pathlib import Path
 from qfcomp.config import (
     OUTPUT_DIR, TOP_N, MAX_SINGLE_WEIGHT, MIN_HOLDINGS,
     BACKTEST_START, FORWARD_RETURN_PERIODS,
-    COV_LOOKBACK, CVAR_ALPHA, CVAR_TURNOVER_LAMBDA, HYBRID_BETA, OPTIMIZER_METHOD,
+    COV_LOOKBACK, CVAR_ALPHA, CVAR_METHOD, CVAR_TURNOVER_LAMBDA, HYBRID_BETA, OPTIMIZER_METHOD,
+    DEFAULT_BEST_PARAMS_JSON, DEFAULT_EFFECTIVE_FACTORS_CSV,
+    REGIME_MODE, REGIME_RELAX_GAMMA, REGIME_STRESS_THRESHOLD, REGIME_MAX_STEP,
 )
 from qfcomp.data_loader.loader import load_all
 from qfcomp.factors.calc import compute_factors, prepare_factor_matrices
@@ -35,11 +39,142 @@ from qfcomp.backtest.engine import (
 from qfcomp.portfolio.regime import calc_position_scale, apply_position_scale, summarize_regime
 
 
+def _load_factor_list_from_csv(path: Path) -> list[str]:
+    if not path.exists():
+        raise FileNotFoundError(f"未找到有效因子文件: {path}")
+    df = pd.read_csv(path)
+    if df.empty:
+        raise ValueError(f"有效因子文件为空: {path}")
+
+    if "因子" in df.columns:
+        raw = df["因子"]
+    elif "factor" in df.columns:
+        raw = df["factor"]
+    else:
+        raw = df.iloc[:, 0]
+
+    factors: list[str] = []
+    seen = set()
+    for v in raw.dropna():
+        f = str(v).strip()
+        if not f or f in seen:
+            continue
+        factors.append(f)
+        seen.add(f)
+    if not factors:
+        raise ValueError(f"有效因子文件中没有可用因子: {path}")
+    return factors
+
+
+def _load_best_params(path: Path) -> dict:
+    if not path.exists():
+        raise FileNotFoundError(f"未找到 best_params 文件: {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"best_params 文件格式错误(需为 JSON 对象): {path}")
+    params = payload.get("best_params", payload)
+    if not isinstance(params, dict):
+        raise ValueError(f"best_params 字段格式错误(需为 JSON 对象): {path}")
+    return params
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="主流程回测（支持合成与Regime消融开关）")
+    parser.add_argument(
+        "--combine-method",
+        type=str,
+        default="",
+        choices=["", "equal", "ic", "icir", "icir_robust"],
+        help="因子合成方法，空字符串表示使用配置文件默认值",
+    )
+    parser.add_argument(
+        "--regime-mode",
+        type=str,
+        default=REGIME_MODE,
+        choices=["rule", "off"],
+        help="Regime 模式：rule=使用宏观仓位缩放；off=关闭仓位缩放(恒等于1)",
+    )
+    parser.add_argument(
+        "--regime-relax-gamma",
+        type=float,
+        default=float(REGIME_RELAX_GAMMA),
+        help="Regime v2: 向满仓混合比例 γ（0~1），默认 0 关闭",
+    )
+    parser.add_argument(
+        "--regime-stress-threshold",
+        type=float,
+        default=float(REGIME_STRESS_THRESHOLD),
+        help="Regime v2: 压力门控阈值（基于 F01/F02/F04 平滑均值）；为空表示不启用门控",
+    )
+    parser.add_argument(
+        "--regime-max-step",
+        type=float,
+        default=float(REGIME_MAX_STEP),
+        help="Regime v2: 仓位日度变化上限（0 表示不限制）",
+    )
+    parser.add_argument(
+        "--top-n",
+        type=int,
+        default=0,
+        help="覆盖配置中的 TopN，0 表示使用配置默认值",
+    )
+    parser.add_argument(
+        "--effective-factors-csv",
+        type=str,
+        default=str(DEFAULT_EFFECTIVE_FACTORS_CSV),
+        help="外部有效因子列表 CSV（列名可为 `因子` 或 `factor`）。为空则使用自动筛选结果",
+    )
+    parser.add_argument(
+        "--best-params-json",
+        type=str,
+        default=str(DEFAULT_BEST_PARAMS_JSON),
+        help="WFO Bayes 最优参数 JSON（如 CVAR贝叶斯_best_params.json）。为空则使用配置默认值",
+    )
+    return parser
+
+
 def main():
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    args = _build_parser().parse_args()
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     run_dir = Path(OUTPUT_DIR) / ts
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"本次运行输出目录: {run_dir}\n")
+
+    best_params = {}
+    if args.best_params_json:
+        best_path = Path(args.best_params_json).expanduser().resolve()
+        best_params = _load_best_params(best_path)
+        print(f"加载 best_params: {best_path}")
+    else:
+        best_path = None
+
+    top_n_default = int(best_params.get("top_n", TOP_N))
+    top_n_use = int(args.top_n) if int(args.top_n) > 0 else top_n_default
+    cov_window_use = int(best_params.get("cov_window", COV_LOOKBACK))
+    cvar_alpha_use = float(best_params.get("cvar_alpha", CVAR_ALPHA))
+    cvar_method_use = str(best_params.get("cvar_method", CVAR_METHOD))
+    turnover_lambda_use = float(best_params.get("turnover_lambda", CVAR_TURNOVER_LAMBDA))
+    hybrid_beta_use = float(best_params.get("hybrid_beta", HYBRID_BETA))
+    max_weight_use = float(best_params.get("max_weight", MAX_SINGLE_WEIGHT))
+    if max_weight_use > MAX_SINGLE_WEIGHT:
+        print(f"  警告: best_params.max_weight={max_weight_use:.4f} 超过上限 {MAX_SINGLE_WEIGHT:.4f}，已截断。")
+        max_weight_use = MAX_SINGLE_WEIGHT
+    if top_n_use < MIN_HOLDINGS:
+        raise ValueError(f"top_n={top_n_use} 小于最小持仓数 MIN_HOLDINGS={MIN_HOLDINGS}")
+    if not (0.0 < cvar_alpha_use < 1.0):
+        raise ValueError(f"cvar_alpha 必须在 (0,1) 内，当前为 {cvar_alpha_use}")
+    if cov_window_use <= 0:
+        raise ValueError(f"cov_window 必须 > 0，当前为 {cov_window_use}")
+    if turnover_lambda_use < 0:
+        raise ValueError(f"turnover_lambda 不能为负，当前为 {turnover_lambda_use}")
+    if not (0.0 <= hybrid_beta_use <= 1.0):
+        raise ValueError(f"hybrid_beta 必须在 [0,1] 内，当前为 {hybrid_beta_use}")
+    if max_weight_use <= 0:
+        raise ValueError(f"max_weight 必须 > 0，当前为 {max_weight_use}")
+    if not (0.0 <= float(args.regime_relax_gamma) <= 1.0):
+        raise ValueError(f"regime_relax_gamma 必须在 [0,1] 内，当前为 {args.regime_relax_gamma}")
+    if float(args.regime_max_step) < 0:
+        raise ValueError(f"regime_max_step 不能为负，当前为 {args.regime_max_step}")
 
     # ====================================================================
     # 1) 数据加载
@@ -71,13 +206,25 @@ def main():
     fwd_shift = FORWARD_RETURN_PERIODS[0]
     shifted_ic = {name: ic.shift(fwd_shift) for name, ic in ic_series_dict.items()}
     train_cutoff = pd.Timestamp(BACKTEST_START) - pd.Timedelta(days=1)
-    effective, prestart_summary = select_effective_factors_from_ic(
+    auto_effective, prestart_summary = select_effective_factors_from_ic(
         shifted_ic, cutoff=str(train_cutoff.date())
     )
     prestart_path = run_dir / "单因子测试结果.csv"
     prestart_summary.to_csv(prestart_path, index=False)
     print(f"  回测前样本测试已保存: {prestart_path}")
-    print(f"  回测前有效因子 ({len(effective)}): {effective}")
+
+    if args.effective_factors_csv:
+        factors_path = Path(args.effective_factors_csv).expanduser().resolve()
+        effective = _load_factor_list_from_csv(factors_path)
+        missing = [f for f in effective if f not in processed]
+        if missing:
+            raise ValueError(f"外部因子列表中存在未计算因子: {missing}")
+        print(f"  自动筛选有效因子 ({len(auto_effective)}): {auto_effective}")
+        print(f"  使用外部有效因子文件: {factors_path}")
+        print(f"  外部有效因子 ({len(effective)}): {effective}")
+    else:
+        effective = auto_effective
+        print(f"  回测前有效因子 ({len(effective)}): {effective}")
 
     effective_path = run_dir / "有效因子.csv"
     pd.DataFrame({"因子": effective}).to_csv(effective_path, index=False, encoding="utf-8-sig")
@@ -88,7 +235,12 @@ def main():
     # ====================================================================
     print("=" * 60)
     print("Step 4: 因子合成")
-    composite = combine_factors(processed, ic_series_dict, effective)
+    combine_method = args.combine_method if args.combine_method else None
+    if combine_method:
+        print(f"  合成方法(命令行): {combine_method}")
+    else:
+        print("  合成方法: 使用配置默认")
+    composite = combine_factors(processed, ic_series_dict, effective, method=combine_method)
     export_composite_factor(composite, output_path=str(run_dir / "合成因子序列.csv"))
 
     # ====================================================================
@@ -96,14 +248,37 @@ def main():
     # ====================================================================
     print("=" * 60)
     print("Step 5: 宏观 Regime 仓位调节")
-    position_scale = calc_position_scale(macro_df, smooth_window=5)
-    regime_stats = summarize_regime(position_scale, start_date=BACKTEST_START)
-    print(f"  仓位系数统计 (回测期):")
-    print(f"    均值={regime_stats['mean']:.2%}, 中位数={regime_stats['median']:.2%}")
-    print(f"    最小={regime_stats['min']:.2%}, 最大={regime_stats['max']:.2%}")
-    print(f"    低仓(<50%): {regime_stats['pct_below_50']:.1%}, "
-          f"中仓(50-80%): {regime_stats['pct_50_80']:.1%}, "
-          f"高仓(>80%): {regime_stats['pct_above_80']:.1%}")
+    if args.regime_mode == "off":
+        position_scale = pd.Series(1.0, index=macro_df.index, name="position_scale")
+        print("  Regime 已关闭：position_scale 恒为 1.0")
+    else:
+        stress_threshold_use = (
+            float(args.regime_stress_threshold)
+            if args.regime_stress_threshold is not None
+            else None
+        )
+        max_step_use = float(args.regime_max_step) if float(args.regime_max_step) > 0 else None
+        position_scale = calc_position_scale(
+            macro_df,
+            smooth_window=5,
+            relax_gamma=float(args.regime_relax_gamma),
+            stress_threshold=stress_threshold_use,
+            max_daily_step=max_step_use,
+            stress_factors=("F01", "F02", "F04"),
+        )
+        print(
+            "  Regime参数: "
+            f"relax_gamma={float(args.regime_relax_gamma):.3f}, "
+            f"stress_threshold={stress_threshold_use}, "
+            f"max_daily_step={max_step_use}"
+        )
+        regime_stats = summarize_regime(position_scale, start_date=BACKTEST_START)
+        print(f"  仓位系数统计 (回测期):")
+        print(f"    均值={regime_stats['mean']:.2%}, 中位数={regime_stats['median']:.2%}")
+        print(f"    最小={regime_stats['min']:.2%}, 最大={regime_stats['max']:.2%}")
+        print(f"    低仓(<50%): {regime_stats['pct_below_50']:.1%}, "
+              f"中仓(50-80%): {regime_stats['pct_50_80']:.1%}, "
+              f"高仓(>80%): {regime_stats['pct_above_80']:.1%}")
 
     # 导出仓位系数序列
     ps_df = position_scale.to_frame("position_scale")
@@ -119,28 +294,42 @@ def main():
     print("Step 6: 生成调仓计划")
     eq_schedule = build_equal_weight_schedule(
         composite, close_matrix,
-        top_n=TOP_N, max_weight=MAX_SINGLE_WEIGHT, min_holdings=MIN_HOLDINGS,
+        top_n=top_n_use, max_weight=max_weight_use, min_holdings=MIN_HOLDINGS,
     )
     print(f"  等权调仓日数: {len(eq_schedule)}")
 
     opt_schedule = build_optimized_schedule(
         composite, close_matrix,
         optimizer=OPTIMIZER_METHOD,
-        top_n=TOP_N,
-        max_weight=MAX_SINGLE_WEIGHT,
+        top_n=top_n_use,
+        max_weight=max_weight_use,
         min_holdings=MIN_HOLDINGS,
-        cov_window=COV_LOOKBACK,
-        cvar_alpha=CVAR_ALPHA,
-        turnover_lambda=CVAR_TURNOVER_LAMBDA,
-        hybrid_beta=HYBRID_BETA,
+        cov_window=cov_window_use,
+        cvar_alpha=cvar_alpha_use,
+        cvar_method=cvar_method_use,
+        turnover_lambda=turnover_lambda_use,
+        hybrid_beta=hybrid_beta_use,
     )
     print(f"  优化器: {OPTIMIZER_METHOD}")
+    print(f"  TopN: {top_n_use}")
+    print(
+        "  优化参数: "
+        f"cov_window={cov_window_use}, "
+        f"alpha={cvar_alpha_use:.6f}, "
+        f"method={cvar_method_use}, "
+        f"turnover_lambda={turnover_lambda_use:.6g}, "
+        f"hybrid_beta={hybrid_beta_use:.4f}, "
+        f"max_weight={max_weight_use:.4f}"
+    )
     print(f"  优化调仓日数: {len(opt_schedule)}")
 
     # 应用宏观仓位调节
     eq_schedule = apply_position_scale(eq_schedule, position_scale)
     opt_schedule = apply_position_scale(opt_schedule, position_scale)
-    print("  已应用宏观 Regime 仓位调节")
+    if args.regime_mode == "off":
+        print("  Regime 已关闭：未进行额外仓位缩放")
+    else:
+        print("  已应用宏观 Regime 仓位调节")
 
     # ====================================================================
     # 7) 回测

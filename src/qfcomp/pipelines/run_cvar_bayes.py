@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-CVaR/RP 混合优化器贝叶斯调参（固定训练/测试日期切分）
-===================================================
+CVaR/RP 混合优化器贝叶斯调参（WFO + RP 锚定正则）
+=================================================
 目标：
-  1) 在给定训练集区间做参数搜索（Bayesian TPE）
-  2) 固定参数后在给定测试集区间做 OOS 验证
-  3) 输出调参明细、最优参数、训练/测试对比与可视化
+  1) 使用滚动步进交叉验证（Walk-Forward Optimization, WFO）做参数搜索
+  2) 以 OOS 折的稳健目标函数选参：mean(Sharpe) - std(Sharpe) - worst-fold 惩罚
+  3) 在目标函数中加入 RP 锚定正则，抑制过度偏离鲁棒基准
+  4) 输出调参明细、最优参数、训练/测试对比与可视化
 
 说明：
-  - 不使用 walk-forward 多折逻辑，按固定日期切分。
   - 候选策略使用 hybrid_cvar_rp（CVaR 与风险平价凸组合）。
   - max_weight 固定 35%，不参与搜索。
 """
@@ -28,6 +28,7 @@ from qfcomp.analysis.cvar_tuning_plots import generate_cvar_bayes_plots
 from qfcomp.config import (
     BACKTEST_START,
     COV_LOOKBACK,
+    CVAR_METHOD,
     FORWARD_RETURN_PERIODS,
     MIN_HOLDINGS,
     OUTPUT_DIR,
@@ -298,8 +299,86 @@ def _nav_row(strategy: str, nav: pd.Series, calc_performance_fn) -> Dict[str, fl
     }
 
 
+def _average_active_share(
+    schedule_a: Dict[pd.Timestamp, pd.Series],
+    schedule_b: Dict[pd.Timestamp, pd.Series],
+) -> float:
+    common_dates = sorted(set(schedule_a.keys()).intersection(set(schedule_b.keys())))
+    if not common_dates:
+        return float("nan")
+
+    vals: List[float] = []
+    for dt in common_dates:
+        wa = schedule_a[dt].sort_index()
+        wb = schedule_b[dt].sort_index()
+        idx = wa.index.union(wb.index)
+        active_share = 0.5 * (
+            wa.reindex(idx, fill_value=0.0) - wb.reindex(idx, fill_value=0.0)
+        ).abs().sum()
+        vals.append(float(active_share))
+    return float(np.mean(vals)) if vals else float("nan")
+
+
+def _build_wfo_folds(
+    index: pd.DatetimeIndex,
+    train_start_min: pd.Timestamp,
+    first_test_start: pd.Timestamp,
+    test_end: pd.Timestamp,
+    train_years: int,
+    test_years: int,
+    step_years: int,
+    min_train_days: int,
+) -> List[Dict[str, object]]:
+    folds: List[Dict[str, object]] = []
+
+    k = 0
+    while True:
+        test_start_raw = first_test_start + pd.DateOffset(years=k * step_years)
+        if test_start_raw > test_end:
+            break
+        test_start = _first_trading_on_or_after(index, pd.Timestamp(test_start_raw))
+        if test_start is None or test_start > test_end:
+            break
+
+        test_end_raw = pd.Timestamp(test_start_raw) + pd.DateOffset(years=test_years) - pd.Timedelta(days=1)
+        test_end_cap = min(pd.Timestamp(test_end_raw), pd.Timestamp(test_end))
+        test_end_dt = _last_trading_on_or_before(index, test_end_cap)
+        if test_end_dt is None or test_end_dt < test_start:
+            k += 1
+            continue
+
+        train_end_dt = _last_trading_on_or_before(index, pd.Timestamp(test_start) - pd.Timedelta(days=1))
+        if train_end_dt is None:
+            k += 1
+            continue
+
+        train_start_raw = pd.Timestamp(train_end_dt) - pd.DateOffset(years=train_years) + pd.Timedelta(days=1)
+        train_start_raw = max(pd.Timestamp(train_start_raw), pd.Timestamp(train_start_min))
+        train_start_dt = _first_trading_on_or_after(index, pd.Timestamp(train_start_raw))
+        if train_start_dt is None or train_start_dt > train_end_dt:
+            k += 1
+            continue
+
+        train_days = int(((index >= train_start_dt) & (index <= train_end_dt)).sum())
+        test_days = int(((index >= test_start) & (index <= test_end_dt)).sum())
+        if train_days >= int(min_train_days) and test_days >= 3:
+            folds.append(
+                {
+                    "fold_id": len(folds) + 1,
+                    "train_start": pd.Timestamp(train_start_dt),
+                    "train_end": pd.Timestamp(train_end_dt),
+                    "test_start": pd.Timestamp(test_start),
+                    "test_end": pd.Timestamp(test_end_dt),
+                    "train_days": int(train_days),
+                    "test_days": int(test_days),
+                }
+            )
+        k += 1
+    return folds
+
+
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="CVaR/RP 混合优化器贝叶斯调参（固定日期切分）")
+    parser = argparse.ArgumentParser(description="CVaR/RP 混合优化器贝叶斯调参（WFO）")
     parser.add_argument("--top-n", type=int, default=TOP_N, help="每期选股数量 Top N（当 low/high 未指定时使用）")
     parser.add_argument("--top-n-low", type=int, default=3, help="TopN 搜索下界")
     parser.add_argument("--top-n-high", type=int, default=7, help="TopN 搜索上界")
@@ -309,23 +388,43 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=42, help="随机种子")
     parser.add_argument("--timeout", type=int, default=0, help="调参超时秒数，0 表示不限制")
 
-    parser.add_argument("--alpha-low", type=float, default=0.90)
-    parser.add_argument("--alpha-high", type=float, default=0.985)
+    parser.add_argument("--alpha-low", type=float, default=0.92)
+    parser.add_argument("--alpha-high", type=float, default=0.96)
     parser.add_argument("--window-low", type=int, default=60)
     parser.add_argument("--window-high", type=int, default=220)
     parser.add_argument("--window-step", type=int, default=5)
     parser.add_argument("--lambda-low", type=float, default=1e-3)
     parser.add_argument("--lambda-high", type=float, default=3e-2)
-    parser.add_argument("--beta-low", type=float, default=0.0, help="hybrid beta 下界（0=纯CVaR）")
-    parser.add_argument("--beta-high", type=float, default=1.0, help="hybrid beta 上界（1=纯RP）")
+    parser.add_argument("--beta-low", type=float, default=0.1, help="hybrid beta 下界（建议 >=0.1，鼓励 RP 锚定）")
+    parser.add_argument("--beta-high", type=float, default=0.5, help="hybrid beta 上界（建议 <=0.5，保留 CVaR 选优能力）")
     parser.add_argument("--beta-step", type=float, default=0.05, help="hybrid beta 步长")
+    parser.add_argument(
+        "--cvar-methods",
+        type=str,
+        default="empirical,parametric,cornish_fisher",
+        help="参与对照/搜索的 CVaR 方法，逗号分隔：empirical,parametric,cornish_fisher",
+    )
 
     parser.add_argument("--train-start", type=str, default="2019-11-01", help="训练集起始日")
     parser.add_argument("--train-end", type=str, default="2020-12-31", help="训练集结束日")
     parser.add_argument("--test-start", type=str, default="2021-01-04", help="测试集起始日")
     parser.add_argument("--test-end", type=str, default="2025-10-30", help="测试集结束日（默认=最后可用交易日）")
     parser.add_argument("--min-train-days", type=int, default=220, help="训练集最少交易日")
-    parser.add_argument("--local-splits", type=int, default=2, help="训练集鲁棒性检查分段数")
+
+    # WFO 配置：基于 test-start 起点按年滚动
+    parser.add_argument("--wfo-train-years", type=int, default=2, help="WFO 每折训练窗口（年）")
+    parser.add_argument("--wfo-test-years", type=int, default=1, help="WFO 每折测试窗口（年）")
+    parser.add_argument("--wfo-step-years", type=int, default=1, help="WFO 滚动步长（年）")
+    parser.add_argument("--wfo-min-folds", type=int, default=3, help="WFO 至少有效折数")
+
+    # WFO 目标函数：mean(OOS Sharpe) - std 惩罚 - worst-fold 惩罚 - RP 锚定正则
+    parser.add_argument("--obj-std-penalty", type=float, default=1.0, help="std(OOS Sharpe) 惩罚系数")
+    parser.add_argument("--obj-worst-penalty", type=float, default=1.0, help="worst-fold 惩罚系数")
+    parser.add_argument("--obj-sharpe-floor", type=float, default=0.0, help="worst-fold Sharpe 下限")
+    parser.add_argument("--rp-anchor-lambda", type=float, default=0.2, help="与 RP 偏离(active share)惩罚系数")
+    parser.add_argument("--wfo-mean-excess-floor", type=float, default=-0.02, help="mean(OOS Sharpe-RP) 软下限")
+    parser.add_argument("--wfo-worst-excess-floor", type=float, default=-0.20, help="worst(OOS Sharpe-RP) 软下限")
+    parser.add_argument("--wfo-excess-penalty", type=float, default=1.0, help="Sharpe 超额软下限惩罚系数")
 
     parser.add_argument(
         "--reuse-run-dir",
@@ -370,14 +469,37 @@ def main() -> None:
         raise ValueError("n_trials 必须 > 0。")
     if args.min_train_days <= 0:
         raise ValueError("min_train_days 必须 > 0。")
-    if args.local_splits <= 0:
-        raise ValueError("local_splits 必须 > 0。")
     if args.top_n_low <= 0 or args.top_n_high < args.top_n_low or args.top_n_step <= 0:
         raise ValueError("TopN 搜索区间非法。")
     if args.top_n_low < MIN_HOLDINGS:
         raise ValueError(f"top_n_low 不能小于最小持仓数 MIN_HOLDINGS={MIN_HOLDINGS}。")
+    if args.wfo_train_years <= 0 or args.wfo_test_years <= 0 or args.wfo_step_years <= 0:
+        raise ValueError("wfo-train-years / wfo-test-years / wfo-step-years 必须 > 0。")
+    if args.wfo_min_folds <= 0:
+        raise ValueError("wfo-min-folds 必须 > 0。")
+    if args.obj_std_penalty < 0 or args.obj_worst_penalty < 0:
+        raise ValueError("obj-std-penalty / obj-worst-penalty 不能为负。")
+    if args.rp_anchor_lambda < 0 or args.wfo_excess_penalty < 0:
+        raise ValueError("rp-anchor-lambda / wfo-excess-penalty 不能为负。")
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    cvar_methods = [m.strip().lower() for m in str(args.cvar_methods).split(",") if m.strip()]
+    alias = {
+        "lp": "empirical",
+        "historical": "empirical",
+        "gaussian": "parametric",
+        "cornish-fisher": "cornish_fisher",
+        "cf": "cornish_fisher",
+    }
+    cvar_methods = [alias.get(m, m) for m in cvar_methods]
+    valid_methods = {"empirical", "parametric", "cornish_fisher"}
+    if not cvar_methods:
+        cvar_methods = [CVAR_METHOD]
+    invalid_methods = sorted(set(cvar_methods) - valid_methods)
+    if invalid_methods:
+        raise ValueError(f"非法 cvar-methods: {invalid_methods}，可选: {sorted(valid_methods)}")
+    cvar_methods = sorted(set(cvar_methods))
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     run_dir = Path(OUTPUT_DIR) / f"cvar_hybrid_bayes_split_{ts}"
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"输出目录: {run_dir}")
@@ -443,16 +565,54 @@ def main() -> None:
                 "fixed_max_weight": FIXED_MAX_WEIGHT,
                 "min_holdings": MIN_HOLDINGS,
                 "rp_cov_window": COV_LOOKBACK,
+                "alpha_low": float(args.alpha_low),
+                "alpha_high": float(args.alpha_high),
+                "window_low": int(args.window_low),
+                "window_high": int(args.window_high),
+                "lambda_low": float(args.lambda_low),
+                "lambda_high": float(args.lambda_high),
+                "beta_low": float(args.beta_low),
+                "beta_high": float(args.beta_high),
+                "cvar_methods": ",".join(cvar_methods),
+                "wfo_train_years": int(args.wfo_train_years),
+                "wfo_test_years": int(args.wfo_test_years),
+                "wfo_step_years": int(args.wfo_step_years),
+                "wfo_min_folds": int(args.wfo_min_folds),
+                "obj_std_penalty": float(args.obj_std_penalty),
+                "obj_worst_penalty": float(args.obj_worst_penalty),
+                "obj_sharpe_floor": float(args.obj_sharpe_floor),
+                "rp_anchor_lambda": float(args.rp_anchor_lambda),
             }
         ]
     )
     split_path = run_dir / "CVAR贝叶斯_split_config.csv"
     split_df.to_csv(split_path, index=False)
+
+    wfo_folds = _build_wfo_folds(
+        index=close_matrix.index,
+        train_start_min=train_start,
+        first_test_start=test_start,
+        test_end=test_end,
+        train_years=int(args.wfo_train_years),
+        test_years=int(args.wfo_test_years),
+        step_years=int(args.wfo_step_years),
+        min_train_days=int(args.min_train_days),
+    )
+    if len(wfo_folds) < int(args.wfo_min_folds):
+        raise ValueError(
+            f"WFO 有效折数不足: {len(wfo_folds)} < {int(args.wfo_min_folds)}，"
+            "请扩大样本区间或降低 min-train-days / wfo-min-folds。"
+        )
+    fold_df = pd.DataFrame(wfo_folds)
+    wfo_path = run_dir / "CVAR贝叶斯_WFO折配置.csv"
+    fold_df.to_csv(wfo_path, index=False)
+
     print("=" * 60)
     print(
-        f"Step 2: 固定切分完成 "
-        f"train[{train_start.date()}~{train_end.date()}], "
-        f"test[{test_start.date()}~{test_end.date()}], train_days={train_days}"
+        f"Step 2: WFO 切分完成 "
+        f"base-train[{train_start.date()}~{train_end.date()}], "
+        f"test-range[{test_start.date()}~{test_end.date()}], "
+        f"folds={len(wfo_folds)}"
     )
 
     rp_train_cache: Dict[int, Dict[str, object]] = {}
@@ -494,6 +654,53 @@ def main() -> None:
         rp_train_cache[top_n] = ref
         return ref
 
+    rp_fold_cache: Dict[tuple[int, int], Dict[str, object]] = {}
+
+    def _get_rp_fold_ref(top_n: int, fold: Dict[str, object]) -> Dict[str, object]:
+        fold_id = int(fold["fold_id"])
+        key = (int(top_n), fold_id)
+        if key in rp_fold_cache:
+            return rp_fold_cache[key]
+
+        fold_test_start = pd.Timestamp(fold["test_start"])
+        fold_test_end = pd.Timestamp(fold["test_end"])
+        rp_raw_all = build_optimized_schedule(
+            composite.loc[:fold_test_end],
+            close_matrix.loc[:fold_test_end],
+            optimizer="risk_parity",
+            top_n=int(top_n),
+            max_weight=FIXED_MAX_WEIGHT,
+            min_holdings=MIN_HOLDINGS,
+            cov_window=COV_LOOKBACK,
+            rebal_start=fold_test_start,
+        )
+        rp_raw = _filter_schedule_by_date(rp_raw_all, start=fold_test_start, end=fold_test_end)
+        if not rp_raw:
+            raise ValueError(f"RP 在 WFO fold#{fold_id} 调仓计划为空，top_n={top_n}")
+        rp_adj = apply_position_scale(rp_raw, position_scale)
+        rp_nav = _run_nav_for_period(
+            close_matrix=close_matrix,
+            schedule=rp_adj,
+            start=fold_test_start,
+            end=fold_test_end,
+            strategy_name=f"rp_fold{fold_id}_top{top_n}",
+            run_backtests_fn=run_backtests,
+            extract_nav_fn=extract_nav,
+        )
+        if rp_nav is None:
+            raise ValueError(f"RP 在 WFO fold#{fold_id} 净值为空，top_n={top_n}")
+
+        rp_struct = _schedule_structure_metrics(rp_raw, rp_adj, max_weight=FIXED_MAX_WEIGHT)
+        ref = {
+            "raw": rp_raw,
+            "adj": rp_adj,
+            "nav": rp_nav,
+            "perf": calc_performance(rp_nav),
+            **rp_struct,
+        }
+        rp_fold_cache[key] = ref
+        return ref
+
     trial_rows: List[Dict[str, object]] = []
 
     def evaluate_candidate(
@@ -503,6 +710,7 @@ def main() -> None:
         cov_window: int,
         turnover_lambda: float,
         hybrid_beta: float,
+        cvar_method: str,
     ) -> Dict[str, object]:
         rec: Dict[str, object] = {
             "trial_number": int(trial_no),
@@ -512,116 +720,173 @@ def main() -> None:
             "test_end": str(test_end.date()),
             "top_n": int(top_n),
             "cvar_alpha": float(cvar_alpha),
+            "cvar_method": str(cvar_method),
             "cov_window": int(cov_window),
             "max_weight": FIXED_MAX_WEIGHT,
             "turnover_lambda": float(turnover_lambda),
             "hybrid_beta": float(hybrid_beta),
+            "wfo_total_folds": int(len(wfo_folds)),
+            "wfo_valid_folds": 0,
+            "wfo_mean_sharpe": np.nan,
+            "wfo_std_sharpe": np.nan,
+            "wfo_min_sharpe": np.nan,
+            "wfo_mean_sharpe_excess": np.nan,
+            "wfo_min_sharpe_excess": np.nan,
+            "avg_turnover": np.nan,
+            "avg_active_share_to_rp": np.nan,
+            "feasible_all_dates": False,
+            "feasible_violations": 0,
+            "enough_wfo_folds": False,
+            "worst_sharpe_ok": False,
+            "mean_excess_ok": False,
+            "worst_excess_ok": False,
+            "pass_all_rules": False,
             "status": "ok",
             "error": "",
         }
         try:
-            raw_all = build_optimized_schedule(
-                composite.loc[:train_end],
-                close_matrix.loc[:train_end],
-                optimizer="hybrid_cvar_rp",
-                top_n=top_n,
-                max_weight=FIXED_MAX_WEIGHT,
-                min_holdings=MIN_HOLDINGS,
-                cov_window=int(cov_window),
-                cvar_alpha=float(cvar_alpha),
-                turnover_lambda=float(turnover_lambda),
-                hybrid_beta=float(hybrid_beta),
-                rebal_start=train_start,
-            )
-            raw_train = _filter_schedule_by_date(raw_all, start=train_start, end=train_end)
-            adj_train = apply_position_scale(raw_train, position_scale)
-            feasible_all, feasible_violations = _validate_schedule(
-                raw_train,
-                max_weight=FIXED_MAX_WEIGHT,
-                min_holdings=MIN_HOLDINGS,
-            )
-            struct = _schedule_structure_metrics(raw_train, adj_train, max_weight=FIXED_MAX_WEIGHT)
-            rec.update(
-                {
-                    "rebal_days": int(len(raw_train)),
-                    "feasible_all_dates": bool(feasible_all),
-                    "feasible_violations": int(feasible_violations),
-                    **struct,
-                }
-            )
-            if len(raw_train) == 0:
-                rec["status"] = "empty_schedule"
+            fold_sharpes: List[float] = []
+            fold_excess: List[float] = []
+            fold_turnover: List[float] = []
+            fold_active_share: List[float] = []
+            feasible_flags: List[bool] = []
+            feasible_violations_total = 0
+
+            for fold in wfo_folds:
+                fold_id = int(fold["fold_id"])
+                fold_test_start = pd.Timestamp(fold["test_start"])
+                fold_test_end = pd.Timestamp(fold["test_end"])
+
+                raw_all = build_optimized_schedule(
+                    composite.loc[:fold_test_end],
+                    close_matrix.loc[:fold_test_end],
+                    optimizer="hybrid_cvar_rp",
+                    top_n=int(top_n),
+                    max_weight=FIXED_MAX_WEIGHT,
+                    min_holdings=MIN_HOLDINGS,
+                    cov_window=int(cov_window),
+                    cvar_alpha=float(cvar_alpha),
+                    cvar_method=str(cvar_method),
+                    turnover_lambda=float(turnover_lambda),
+                    hybrid_beta=float(hybrid_beta),
+                    rebal_start=fold_test_start,
+                )
+                raw_fold = _filter_schedule_by_date(raw_all, start=fold_test_start, end=fold_test_end)
+                feasible_all, feasible_violations = _validate_schedule(
+                    raw_fold,
+                    max_weight=FIXED_MAX_WEIGHT,
+                    min_holdings=MIN_HOLDINGS,
+                )
+                feasible_flags.append(bool(feasible_all))
+                feasible_violations_total += int(feasible_violations)
+                if not raw_fold:
+                    continue
+
+                adj_fold = apply_position_scale(raw_fold, position_scale)
+                cand_nav = _run_nav_for_period(
+                    close_matrix=close_matrix,
+                    schedule=adj_fold,
+                    start=fold_test_start,
+                    end=fold_test_end,
+                    strategy_name=f"cand_t{trial_no}_fold{fold_id}",
+                    run_backtests_fn=run_backtests,
+                    extract_nav_fn=extract_nav,
+                )
+                if cand_nav is None:
+                    continue
+
+                cand_perf = calc_performance(cand_nav)
+                rp_ref = _get_rp_fold_ref(top_n=int(top_n), fold=fold)
+                rp_sharpe = float(rp_ref["perf"]["sharpe"])
+                cand_sharpe = float(cand_perf["sharpe"])
+                excess = cand_sharpe - rp_sharpe
+                rec[f"fold{fold_id}_sharpe"] = cand_sharpe
+                rec[f"fold{fold_id}_rp_sharpe"] = rp_sharpe
+                rec[f"fold{fold_id}_sharpe_excess"] = excess
+
+                fold_sharpes.append(cand_sharpe)
+                fold_excess.append(excess)
+
+                struct = _schedule_structure_metrics(raw_fold, adj_fold, max_weight=FIXED_MAX_WEIGHT)
+                avg_turn = _safe_float(struct.get("avg_turnover"), default=np.nan)
+                if np.isfinite(avg_turn):
+                    fold_turnover.append(float(avg_turn))
+                active_share = _average_active_share(raw_fold, rp_ref["raw"])
+                if np.isfinite(active_share):
+                    fold_active_share.append(float(active_share))
+
+            valid_folds = len(fold_sharpes)
+            if valid_folds == 0:
+                rec["status"] = "empty_wfo"
                 rec["objective"] = -1e6
                 return rec
 
-            train_nav = _run_nav_for_period(
-                close_matrix=close_matrix,
-                schedule=adj_train,
-                start=train_start,
-                end=train_end,
-                strategy_name=f"cand_train_t{trial_no}",
-                run_backtests_fn=run_backtests,
-                extract_nav_fn=extract_nav,
+            sharpe_arr = np.array(fold_sharpes, dtype=float)
+            excess_arr = np.array(fold_excess, dtype=float)
+            mean_sharpe = float(np.mean(sharpe_arr))
+            std_sharpe = float(np.std(sharpe_arr, ddof=1)) if valid_folds > 1 else 0.0
+            min_sharpe = float(np.min(sharpe_arr))
+            mean_excess = float(np.mean(excess_arr))
+            min_excess = float(np.min(excess_arr))
+            mean_turnover = float(np.mean(fold_turnover)) if fold_turnover else np.nan
+            mean_active_share = float(np.mean(fold_active_share)) if fold_active_share else np.nan
+            feasible_all_folds = bool(all(feasible_flags)) if feasible_flags else False
+
+            enough_folds = valid_folds >= int(args.wfo_min_folds)
+            worst_sharpe_ok = min_sharpe >= float(args.obj_sharpe_floor)
+            mean_excess_ok = mean_excess >= float(args.wfo_mean_excess_floor)
+            worst_excess_ok = min_excess >= float(args.wfo_worst_excess_floor)
+            pass_all_rules = (
+                enough_folds
+                and feasible_all_folds
+                and worst_sharpe_ok
+                and mean_excess_ok
+                and worst_excess_ok
             )
-            if train_nav is None:
-                rec["status"] = "empty_nav"
-                rec["objective"] = -1e6
-                return rec
 
-            perf = calc_performance(train_nav)
-            tail = _tail_metrics(train_nav)
-            split_abs = _split_sharpes_abs(train_nav, calc_performance)
-            rec.update({k: float(v) for k, v in perf.items()})
-            rec.update({k: float(v) for k, v in tail.items()})
-            rec.update({k: float(v) for k, v in split_abs.items()})
-
-            rp_ref = _get_rp_train_ref(top_n)
-            rp_train_nav = rp_ref["rp_nav"]
-            rp_train_mdd_limit = float(rp_ref["mdd_limit"])
-            rp_train_ann_ret_limit = float(rp_ref["ann_ret_limit"])
-            rp_train_sharpe_target = float(rp_ref["sharpe_target"])
-
-            hard_mdd_ok = abs(float(rec["max_drawdown"])) <= rp_train_mdd_limit
-            hard_return_ok = float(rec["annual_return"]) >= rp_train_ann_ret_limit
-            local_split_ge_cnt, local_split_valid = _split_sharpe_ge_count_local(
-                nav=train_nav,
-                rp_nav=rp_train_nav,
-                calc_performance_fn=calc_performance,
-                n_splits=int(args.local_splits),
-            )
-            local_split_rule_ok = (local_split_valid >= 2) and (local_split_ge_cnt >= 2)
-            full_sample_sharpe_improve_ok = float(rec["sharpe"]) >= rp_train_sharpe_target
-            robust_ok = local_split_rule_ok and full_sample_sharpe_improve_ok
-            pass_all_rules = hard_mdd_ok and hard_return_ok and robust_ok
             rec.update(
                 {
-                    "hard_mdd_ok": bool(hard_mdd_ok),
-                    "hard_return_ok": bool(hard_return_ok),
-                    "local_split_ge_rp_count": int(local_split_ge_cnt),
-                    "local_split_valid_segments": int(local_split_valid),
-                    "local_split_rule_ok": bool(local_split_rule_ok),
-                    "full_sample_sharpe_improve_ok": bool(full_sample_sharpe_improve_ok),
-                    "robust_ok": bool(robust_ok),
+                    "wfo_total_folds": int(len(wfo_folds)),
+                    "wfo_valid_folds": int(valid_folds),
+                    "wfo_mean_sharpe": mean_sharpe,
+                    "wfo_std_sharpe": std_sharpe,
+                    "wfo_min_sharpe": min_sharpe,
+                    "wfo_mean_sharpe_excess": mean_excess,
+                    "wfo_min_sharpe_excess": min_excess,
+                    "avg_turnover": mean_turnover,
+                    "avg_active_share_to_rp": mean_active_share,
+                    "feasible_all_dates": bool(feasible_all_folds),
+                    "feasible_violations": int(feasible_violations_total),
+                    "enough_wfo_folds": bool(enough_folds),
+                    "worst_sharpe_ok": bool(worst_sharpe_ok),
+                    "mean_excess_ok": bool(mean_excess_ok),
+                    "worst_excess_ok": bool(worst_excess_ok),
                     "pass_all_rules": bool(pass_all_rules),
+                    # 兼容现有可视化与排序字段
+                    "sharpe": mean_sharpe,
                 }
             )
 
-            obj = float(rec["sharpe"])
-            if not feasible_all:
-                obj -= 2.0 + 0.1 * float(feasible_violations)
-            if not hard_mdd_ok:
-                obj -= 5.0 + 100.0 * max(0.0, abs(float(rec["max_drawdown"])) - rp_train_mdd_limit)
-            if not hard_return_ok:
-                obj -= 5.0 + 100.0 * max(0.0, rp_train_ann_ret_limit - float(rec["annual_return"]))
-            if local_split_valid < 2:
-                obj -= 1.0
-            elif local_split_ge_cnt < 2:
-                obj -= 1.5 * float(2 - local_split_ge_cnt)
-            if not full_sample_sharpe_improve_ok:
-                obj -= 0.5
-            avg_turnover = _safe_float(rec.get("avg_turnover"), default=np.nan)
-            if np.isfinite(avg_turnover) and avg_turnover > 0.55:
-                obj -= 0.4 * float(avg_turnover - 0.55)
+            if not enough_folds:
+                rec["status"] = "insufficient_wfo_folds"
+                rec["objective"] = -1e6
+                return rec
+
+            obj = mean_sharpe
+            obj -= float(args.obj_std_penalty) * std_sharpe
+            obj -= float(args.obj_worst_penalty) * max(0.0, float(args.obj_sharpe_floor) - min_sharpe)
+            if np.isfinite(mean_active_share):
+                obj -= float(args.rp_anchor_lambda) * mean_active_share
+            else:
+                obj -= float(args.rp_anchor_lambda)
+
+            if mean_excess < float(args.wfo_mean_excess_floor):
+                obj -= float(args.wfo_excess_penalty) * (float(args.wfo_mean_excess_floor) - mean_excess)
+            if min_excess < float(args.wfo_worst_excess_floor):
+                obj -= float(args.wfo_excess_penalty) * (float(args.wfo_worst_excess_floor) - min_excess)
+            if not feasible_all_folds:
+                obj -= 1.0 + 0.05 * float(feasible_violations_total)
+
             rec["objective"] = float(obj)
             return rec
         except Exception as exc:  # noqa: BLE001
@@ -663,6 +928,10 @@ def main() -> None:
             float(args.beta_high),
             step=float(args.beta_step),
         )
+        if len(cvar_methods) == 1:
+            cvar_method = cvar_methods[0]
+        else:
+            cvar_method = trial.suggest_categorical("cvar_method", cvar_methods)
         rec = evaluate_candidate(
             trial_no=trial.number,
             top_n=top_n,
@@ -670,6 +939,7 @@ def main() -> None:
             cov_window=cov_window,
             turnover_lambda=turnover_lambda,
             hybrid_beta=hybrid_beta,
+            cvar_method=cvar_method,
         )
         trial_rows.append(rec)
         return float(rec["objective"])
@@ -678,6 +948,8 @@ def main() -> None:
     print(
         f"Step 3: 启动贝叶斯调参（optimizer=hybrid_cvar_rp, "
         f"fixed_max_weight={FIXED_MAX_WEIGHT:.2f}, "
+        f"cvar_methods={cvar_methods}, "
+        f"objective=mean_sharpe-std_penalty*std-worst_penalty*shortfall-rp_anchor, "
         f"top_n_range=[{int(args.top_n_low)},{int(args.top_n_high)}], "
         f"n_trials={int(args.n_trials)}）"
     )
@@ -699,6 +971,28 @@ def main() -> None:
     trials_path = run_dir / "CVAR贝叶斯_trials.csv"
     trials_df.to_csv(trials_path, index=False)
 
+    method_cmp_path = run_dir / "CVAR贝叶斯_CVaR方法对照.csv"
+    if "cvar_method" in trials_df.columns:
+        method_cmp_df = (
+            trials_df.groupby("cvar_method", dropna=False)
+            .agg(
+                trials=("objective", "count"),
+                mean_objective=("objective", "mean"),
+                best_objective=("objective", "max"),
+                mean_wfo_sharpe=("wfo_mean_sharpe", "mean"),
+                best_wfo_sharpe=("wfo_mean_sharpe", "max"),
+                mean_wfo_excess=("wfo_mean_sharpe_excess", "mean"),
+                best_wfo_excess=("wfo_mean_sharpe_excess", "max"),
+                mean_active_share=("avg_active_share_to_rp", "mean"),
+                pass_rate=("pass_all_rules", lambda x: float(pd.Series(x).fillna(False).astype(bool).mean())),
+            )
+            .reset_index()
+            .sort_values(["best_objective", "mean_objective"], ascending=[False, False])
+        )
+        method_cmp_df.to_csv(method_cmp_path, index=False)
+    else:
+        method_cmp_df = pd.DataFrame()
+
     pass_df = trials_df[trials_df["pass_all_rules"].fillna(False).astype(bool)].copy()
     pass_path = run_dir / "CVAR贝叶斯_通过规则.csv"
     pass_df.to_csv(pass_path, index=False)
@@ -709,8 +1003,15 @@ def main() -> None:
 
     if not pass_df.empty:
         best_row = pass_df.sort_values(
-            ["objective", "sharpe", "calmar", "es95_loss", "avg_turnover"],
-            ascending=[False, False, False, True, True],
+            [
+                "objective",
+                "wfo_mean_sharpe",
+                "wfo_mean_sharpe_excess",
+                "wfo_min_sharpe",
+                "avg_active_share_to_rp",
+                "avg_turnover",
+            ],
+            ascending=[False, False, False, False, True, True],
         ).iloc[0]
         selected_from = "pass_all_rules"
     else:
@@ -720,6 +1021,7 @@ def main() -> None:
     best_params = {
         "top_n": int(best_row["top_n"]),
         "cvar_alpha": float(best_row["cvar_alpha"]),
+        "cvar_method": str(best_row.get("cvar_method", CVAR_METHOD)),
         "cov_window": int(best_row["cov_window"]),
         "max_weight": FIXED_MAX_WEIGHT,
         "turnover_lambda": float(best_row["turnover_lambda"]),
@@ -739,6 +1041,7 @@ def main() -> None:
         min_holdings=MIN_HOLDINGS,
         cov_window=best_params["cov_window"],
         cvar_alpha=best_params["cvar_alpha"],
+        cvar_method=best_params["cvar_method"],
         turnover_lambda=best_params["turnover_lambda"],
         hybrid_beta=best_params["hybrid_beta"],
         rebal_start=train_start,
@@ -767,6 +1070,7 @@ def main() -> None:
         min_holdings=MIN_HOLDINGS,
         cov_window=best_params["cov_window"],
         cvar_alpha=best_params["cvar_alpha"],
+        cvar_method=best_params["cvar_method"],
         turnover_lambda=best_params["turnover_lambda"],
         hybrid_beta=best_params["hybrid_beta"],
         rebal_start=test_start,
@@ -836,9 +1140,16 @@ def main() -> None:
                 "test_end": str(test_end.date()),
                 "selected_from": selected_from,
                 **best_params,
-                "train_best_objective": _safe_float(best_row.get("objective")),
-                "train_best_sharpe": _safe_float(best_row.get("sharpe")),
-                "train_pass_all_rules": bool(best_row.get("pass_all_rules", False)),
+                "wfo_total_folds": _safe_float(best_row.get("wfo_total_folds")),
+                "wfo_valid_folds": _safe_float(best_row.get("wfo_valid_folds")),
+                "wfo_best_objective": _safe_float(best_row.get("objective")),
+                "wfo_best_mean_sharpe": _safe_float(best_row.get("wfo_mean_sharpe")),
+                "wfo_best_std_sharpe": _safe_float(best_row.get("wfo_std_sharpe")),
+                "wfo_best_min_sharpe": _safe_float(best_row.get("wfo_min_sharpe")),
+                "wfo_best_mean_excess": _safe_float(best_row.get("wfo_mean_sharpe_excess")),
+                "wfo_best_min_excess": _safe_float(best_row.get("wfo_min_sharpe_excess")),
+                "wfo_best_avg_active_share_to_rp": _safe_float(best_row.get("avg_active_share_to_rp")),
+                "wfo_pass_all_rules": bool(best_row.get("pass_all_rules", False)),
                 "test_rp_sharpe": float(test_compare_df.iloc[0]["sharpe"]),
                 "test_cand_sharpe": float(test_compare_df.iloc[1]["sharpe"]),
                 "test_sharpe_excess": oos_sharpe_excess,
@@ -848,18 +1159,39 @@ def main() -> None:
     summary_path = run_dir / "CVAR贝叶斯_摘要.csv"
     summary_df.to_csv(summary_path, index=False)
 
+    wfo_folds_payload = [
+        {
+            "fold_id": int(f["fold_id"]),
+            "train_start": str(pd.Timestamp(f["train_start"]).date()),
+            "train_end": str(pd.Timestamp(f["train_end"]).date()),
+            "test_start": str(pd.Timestamp(f["test_start"]).date()),
+            "test_end": str(pd.Timestamp(f["test_end"]).date()),
+            "train_days": int(f["train_days"]),
+            "test_days": int(f["test_days"]),
+        }
+        for f in wfo_folds
+    ]
+
     best_params_payload = {
-        "mode": "fixed_split_bayes_hybrid_cvar_rp",
+        "mode": "wfo_bayes_hybrid_cvar_rp",
         "train_start": str(train_start.date()),
         "train_end": str(train_end.date()),
         "test_start": str(test_start.date()),
         "test_end": str(test_end.date()),
         "fixed_max_weight": FIXED_MAX_WEIGHT,
+        "cvar_methods": cvar_methods,
+        "cvar_method_compare_file": str(method_cmp_path),
+        "wfo_folds": wfo_folds_payload,
         "optimizer": "hybrid_cvar_rp",
         "best_params": best_params,
         "selected_from": selected_from,
-        "train_best_objective": _safe_float(best_row.get("objective")),
-        "train_best_sharpe": _safe_float(best_row.get("sharpe")),
+        "wfo_best_objective": _safe_float(best_row.get("objective")),
+        "wfo_best_mean_sharpe": _safe_float(best_row.get("wfo_mean_sharpe")),
+        "wfo_best_std_sharpe": _safe_float(best_row.get("wfo_std_sharpe")),
+        "wfo_best_min_sharpe": _safe_float(best_row.get("wfo_min_sharpe")),
+        "wfo_best_mean_excess": _safe_float(best_row.get("wfo_mean_sharpe_excess")),
+        "wfo_best_min_excess": _safe_float(best_row.get("wfo_min_sharpe_excess")),
+        "wfo_best_avg_active_share_to_rp": _safe_float(best_row.get("avg_active_share_to_rp")),
         "test_sharpe_excess_vs_rp": oos_sharpe_excess,
     }
     best_path = run_dir / "CVAR贝叶斯_best_params.json"
@@ -896,15 +1228,26 @@ def main() -> None:
         )
 
     print("=" * 60)
-    print("固定切分贝叶斯调参摘要")
-    print(f"  训练区间: {train_start.date()} ~ {train_end.date()}")
-    print(f"  测试区间: {test_start.date()} ~ {test_end.date()}")
+    print("WFO 贝叶斯调参摘要")
+    print(f"  base-train 区间: {train_start.date()} ~ {train_end.date()}")
+    print(f"  test-range 区间: {test_start.date()} ~ {test_end.date()}")
+    print(f"  WFO 折数: {len(wfo_folds)}")
     print(f"  trial 数: {len(trials_df)}")
     print(f"  通过全部规则数: {int(pass_df.shape[0])}")
     print(f"  最优来源: {selected_from}")
+    print(f"  最优 CVaR 方法: {best_params['cvar_method']}")
+    print(f"  最优 WFO mean/std/min Sharpe: "
+          f"{_safe_float(best_row.get('wfo_mean_sharpe')):.4f} / "
+          f"{_safe_float(best_row.get('wfo_std_sharpe')):.4f} / "
+          f"{_safe_float(best_row.get('wfo_min_sharpe')):.4f}")
+    print(f"  最优 WFO mean/min Sharpe 超额(相对RP): "
+          f"{_safe_float(best_row.get('wfo_mean_sharpe_excess')):.4f} / "
+          f"{_safe_float(best_row.get('wfo_min_sharpe_excess')):.4f}")
     print(f"  测试集 Sharpe 超额 (cand - RP): {oos_sharpe_excess:.4f}")
     print(f"  Split 配置: {split_path}")
+    print(f"  WFO 折配置: {wfo_path}")
     print(f"  Trials 明细: {trials_path}")
+    print(f"  CVaR 方法对照: {method_cmp_path}")
     print(f"  Top20: {top20_path}")
     print(f"  训练集对比: {train_compare_path}")
     print(f"  测试集对比: {test_compare_path}")

@@ -41,7 +41,7 @@ _ensure_writable_plot_cache_dirs()
 
 from qfcomp.config import (
     BACKTEST_START, TOP_N, MAX_SINGLE_WEIGHT, MIN_HOLDINGS,
-    COV_LOOKBACK, SHRINKAGE_FACTOR, CVAR_ALPHA, CVAR_TURNOVER_LAMBDA, HYBRID_BETA,
+    COV_LOOKBACK, SHRINKAGE_FACTOR, CVAR_ALPHA, CVAR_TURNOVER_LAMBDA, CVAR_METHOD, HYBRID_BETA,
     TRANSACTION_COST, OUTPUT_DIR,
 )
 from qfcomp.data_loader.loader import get_rebalance_dates_from_start
@@ -135,6 +135,7 @@ def build_optimized_schedule(composite: pd.DataFrame,
                              cov_window: int = None,
                              shrinkage: float = None,
                              cvar_alpha: float = None,
+                             cvar_method: str = None,
                              turnover_lambda: float = None,
                              hybrid_beta: float = None,
                              rebal_start: Optional[pd.Timestamp] = None) -> dict:
@@ -153,6 +154,7 @@ def build_optimized_schedule(composite: pd.DataFrame,
     cov_window = COV_LOOKBACK if cov_window is None else cov_window
     shrinkage = SHRINKAGE_FACTOR if shrinkage is None else shrinkage
     cvar_alpha = CVAR_ALPHA if cvar_alpha is None else cvar_alpha
+    cvar_method = CVAR_METHOD if cvar_method is None else cvar_method
     turnover_lambda = CVAR_TURNOVER_LAMBDA if turnover_lambda is None else turnover_lambda
     hybrid_beta = HYBRID_BETA if hybrid_beta is None else hybrid_beta
 
@@ -196,6 +198,7 @@ def build_optimized_schedule(composite: pd.DataFrame,
                 min_holdings=min_holdings,
                 prev_weights=prev_weights,
                 turnover_lambda=turnover_lambda,
+                cvar_method=cvar_method,
             )
         elif optimizer == "hybrid_cvar_rp":
             weights = hybrid_cvar_rp_weights(
@@ -207,6 +210,7 @@ def build_optimized_schedule(composite: pd.DataFrame,
                 shrinkage=shrinkage,
                 prev_weights=prev_weights,
                 turnover_lambda=turnover_lambda,
+                cvar_method=cvar_method,
             )
         else:
             cov = compute_cov_from_returns(ret_win, shrinkage)

@@ -18,6 +18,7 @@ import pandas as pd
 from qfcomp.config import (
     COMBINE_METHOD, COMBINE_ROLLING_WINDOW, FORWARD_RETURN_PERIODS,
     BACKTEST_START,
+    COMBINE_ROBUST_CORR_PENALTY, COMBINE_ROBUST_TURNOVER_SMOOTH,
 )
 
 def determine_factor_directions(ic_series_dict: dict,
@@ -53,9 +54,66 @@ def determine_factor_directions(ic_series_dict: dict,
     return directions
 
 
+def _calc_quality_score_from_prestart(ic_df: pd.DataFrame, cutoff: str | None) -> pd.Series:
+    """
+    基于回测前样本估计因子静态质量分：
+      quality = |ICIR| * (0.5 + 0.5 * tanh(|t_stat|/2))
+    """
+    ic_use = ic_df.copy()
+    if cutoff:
+        ic_use = ic_use.loc[:pd.Timestamp(cutoff)]
+
+    mean_ic = ic_use.mean(axis=0)
+    std_ic = ic_use.std(axis=0).replace(0, np.nan)
+    n_obs = ic_use.count(axis=0).replace(0, np.nan)
+
+    abs_icir = (mean_ic / std_ic).abs().replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    t_stat = (mean_ic / (std_ic / np.sqrt(n_obs))).abs().replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    sig = np.tanh(t_stat / 2.0)
+    quality = abs_icir * (0.5 + 0.5 * sig)
+    return quality.fillna(0.0)
+
+
+def _apply_corr_penalty(ic_df: pd.DataFrame,
+                        quality: pd.Series,
+                        cutoff: str | None,
+                        corr_penalty_lambda: float) -> pd.Series:
+    """
+    用回测前样本相关性惩罚冗余因子：
+      q_adj_i = q_i / (1 + lambda * sum_j |corr_ij| * q_j)
+    """
+    ic_use = ic_df.copy()
+    if cutoff:
+        ic_use = ic_use.loc[:pd.Timestamp(cutoff)]
+
+    corr_abs = ic_use.corr().abs().fillna(0.0)
+    if corr_abs.empty:
+        return quality
+
+    np.fill_diagonal(corr_abs.values, 0.0)
+    q = quality.reindex(corr_abs.columns).fillna(0.0)
+    redundancy = corr_abs.dot(q)
+    q_adj = q / (1.0 + float(corr_penalty_lambda) * redundancy)
+    return q_adj.reindex(quality.index).fillna(0.0)
+
+
+def _normalize_rowwise(raw_weights: pd.DataFrame) -> pd.DataFrame:
+    row_sum = raw_weights.sum(axis=1).replace(0, np.nan)
+    weights = raw_weights.div(row_sum, axis=0)
+    # 行内全 NaN 时回退等权，避免后续合成出现整行缺失
+    nan_rows = weights.isna().all(axis=1)
+    if nan_rows.any():
+        n_cols = weights.shape[1]
+        weights.loc[nan_rows, :] = 1.0 / n_cols if n_cols > 0 else np.nan
+    return weights.fillna(0.0)
+
+
 def calc_rolling_ic_weights(ic_series_dict: dict,
                               method: str = None,
-                              window: int = None) -> pd.DataFrame:
+                              window: int = None,
+                              cutoff: str = None,
+                              corr_penalty_lambda: float = None,
+                              turnover_smooth: float = None) -> pd.DataFrame:
     """
     计算滚动因子权重
 
@@ -66,7 +124,8 @@ def calc_rolling_ic_weights(ic_series_dict: dict,
     method : str
         "equal" : 等权
         "ic"    : 按滚动 IC 均值加权
-        "icir"  : 按滚动 ICIR (IC均值/IC标准差) 加权 (推荐)
+        "icir"  : 按滚动 ICIR (IC均值/IC标准差) 加权
+        "icir_robust": 在滚动 ICIR 上叠加显著性质量分、相关性惩罚与时间平滑
     window : int
         滚动窗口（交易日）
 
@@ -77,6 +136,12 @@ def calc_rolling_ic_weights(ic_series_dict: dict,
     """
     method = method or COMBINE_METHOD
     window = window or COMBINE_ROLLING_WINDOW
+    corr_penalty_lambda = (
+        COMBINE_ROBUST_CORR_PENALTY if corr_penalty_lambda is None else float(corr_penalty_lambda)
+    )
+    turnover_smooth = (
+        COMBINE_ROBUST_TURNOVER_SMOOTH if turnover_smooth is None else float(turnover_smooth)
+    )
 
     # 拼接所有因子的 IC 序列为 DataFrame
     ic_df = pd.DataFrame(ic_series_dict)
@@ -102,12 +167,32 @@ def calc_rolling_ic_weights(ic_series_dict: dict,
         rolling_std = ic_df.rolling(window, min_periods=20).std()
         raw_weights = (rolling_mean / rolling_std.replace(0, np.nan)).abs()
 
+    elif method == "icir_robust":
+        # 动态层：滚动 ICIR
+        rolling_mean = ic_df.rolling(window, min_periods=20).mean()
+        rolling_std = ic_df.rolling(window, min_periods=20).std()
+        dynamic_score = (rolling_mean / rolling_std.replace(0, np.nan)).abs()
+
+        # 静态层：回测前样本质量分 + 冗余惩罚
+        quality = _calc_quality_score_from_prestart(ic_df, cutoff=cutoff)
+        quality = _apply_corr_penalty(
+            ic_df,
+            quality=quality,
+            cutoff=cutoff,
+            corr_penalty_lambda=corr_penalty_lambda,
+        )
+        raw_weights = dynamic_score.mul(quality, axis=1)
+
     else:
         raise ValueError(f"未知的合成方法: {method}")
 
-    # 行归一化：每天权重和为 1
-    row_sum = raw_weights.sum(axis=1).replace(0, np.nan)
-    weights = raw_weights.div(row_sum, axis=0)
+    weights = _normalize_rowwise(raw_weights)
+
+    # 时间平滑：仅使用历史权重，抑制权重抖动
+    if method == "icir_robust":
+        alpha = float(np.clip(turnover_smooth, 1e-3, 1.0))
+        weights = weights.ewm(alpha=alpha, adjust=False).mean()
+        weights = _normalize_rowwise(weights)
 
     return weights
 
@@ -116,7 +201,9 @@ def combine_factors(factor_matrices: dict,
                      ic_series_dict: dict,
                      effective_factors: list = None,
                      method: str = None,
-                     window: int = None) -> pd.DataFrame:
+                     window: int = None,
+                     corr_penalty_lambda: float = None,
+                     turnover_smooth: float = None) -> pd.DataFrame:
     """
     合成综合因子
 
@@ -158,6 +245,10 @@ def combine_factors(factor_matrices: dict,
 
     print(f"合成因子使用 {len(use_factors)} 个因子: {use_factors}")
     print(f"合成方法: {method}, 滚动窗口: {window or COMBINE_ROLLING_WINDOW}")
+    if (method or COMBINE_METHOD) == "icir_robust":
+        cpl = COMBINE_ROBUST_CORR_PENALTY if corr_penalty_lambda is None else corr_penalty_lambda
+        tsm = COMBINE_ROBUST_TURNOVER_SMOOTH if turnover_smooth is None else turnover_smooth
+        print(f"鲁棒参数: corr_penalty_lambda={cpl}, turnover_smooth={tsm}")
 
     # ── 关键：修正前视偏差 ──
     # IC[t] 使用了 T+fwd 日的收益，直到 t+fwd 才可知。
@@ -180,6 +271,9 @@ def combine_factors(factor_matrices: dict,
     weights = calc_rolling_ic_weights(
         shifted_ic,
         method=method, window=window,
+        cutoff=str(train_cutoff.date()),
+        corr_penalty_lambda=corr_penalty_lambda,
+        turnover_smooth=turnover_smooth,
     )
 
     # 3. 对齐日期范围
@@ -195,7 +289,7 @@ def combine_factors(factor_matrices: dict,
     for factor_name in use_factors:
         mat = factor_matrices[factor_name].loc[all_dates, all_secs]
         direction = directions[factor_name]
-        w = weights.loc[all_dates, factor_name]
+        w = weights.loc[all_dates, factor_name].fillna(0.0)
 
         # composite += direction * w * factor_value
         composite += mat.mul(direction).mul(w, axis=0)

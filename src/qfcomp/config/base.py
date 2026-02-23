@@ -23,7 +23,7 @@ BACKTEST_START = "2021-01-04"          # 回测起始日（赛题硬性要求）
 RISK_FREE_RATE = 0.0                   # 无风险利率（赛题要求 0%）
 TRANSACTION_COST = 2.5 / 10000         # 交易手续费 万分之2.5
 REBALANCE_FREQ = "W"                   # 调仓频率：周度
-TOP_N = 4                              # 每期选取 Top N 只 ETF（≥3）
+TOP_N = 9                              # 每期选取 Top N 只 ETF（≥3）
 MAX_SINGLE_WEIGHT = 0.35               # 单只 ETF 权重上限 35%
 MIN_HOLDINGS = 3                       # 最少持仓数量
 
@@ -37,6 +37,9 @@ PANEL_FACTORS = [
     "E01", "E02",
     "G01", "G02", "G03",
     "H01",
+    "K02", "K04",
+    "M01", "M03",
+    "N01",
     "T01",
 ]
 
@@ -52,15 +55,34 @@ IC_ROLLING_WINDOW = 60                 # 滚动 IC 计算窗口（交易日）
 IC_MIN_OBS = 10                        # 截面最少有效观测数
 
 # ========== 因子合成参数 ==========
-COMBINE_METHOD = "icir"                # 合成方法：ic / icir / equal
+# 合成方法：ic / icir / equal / icir_robust
+# icir_robust: 在滚动ICIR基础上叠加
+#   1) 回测前样本显著性质量分
+#   2) 因子相关性惩罚（降低冗余因子权重）
+#   3) 时间维度权重平滑（抑制权重抖动）
+COMBINE_METHOD = "icir_robust"
 COMBINE_ROLLING_WINDOW = 60            # 合成权重的滚动窗口
+COMBINE_ROBUST_CORR_PENALTY = 0.8      # icir_robust 的相关性惩罚强度
+COMBINE_ROBUST_TURNOVER_SMOOTH = 0.35  # icir_robust 的时间平滑强度(0,1]
 
 # ========== 组合优化参数 ==========
-COV_LOOKBACK = 130                      # 优化窗口（协方差或历史收益场景）
+COV_LOOKBACK = 160                      # 优化窗口（协方差或历史收益场景）
 SHRINKAGE_FACTOR = 0.05                 # Ledoit-Wolf 收缩系数（简化版）
-CVAR_ALPHA = 0.93                      # CVaR 置信水平（尾部比例 = 1 - alpha）
-CVAR_TURNOVER_LAMBDA = 0.004             # CVaR 换手惩罚系数 λ（0 表示关闭）
-HYBRID_BETA = 0.0                     # 混合比例：0=纯CVaR, 1=纯风险平价
+CVAR_ALPHA = 0.923913                  # CVaR 置信水平（尾部比例 = 1 - alpha）
+CVAR_TURNOVER_LAMBDA = 0.0041403       # CVaR 换手惩罚系数 λ（0 表示关闭）
+CVAR_METHOD = "cornish_fisher"         # CVaR 估计方法：empirical / parametric / cornish_fisher
+HYBRID_BETA = 0.05                     # 混合比例：0=纯CVaR, 1=纯风险平价
 
 # 优化器选择：risk_parity / min_variance / cvar / hybrid_cvar_rp
 OPTIMIZER_METHOD = "hybrid_cvar_rp"
+
+# ========== 最终默认复现配置 ==========
+# 默认加载的最优参数文件与去重因子文件（run_main 可直接使用，无需每次手敲长命令）
+DEFAULT_BEST_PARAMS_JSON = OUTPUT_DIR / "cvar_hybrid_bayes_split_20260223_214730" / "CVAR贝叶斯_best_params.json"
+DEFAULT_EFFECTIVE_FACTORS_CSV = DATA_DIR / "corr0.7_greedy_有效因子.csv"
+
+# Regime 默认模式（rule_v2 参数）
+REGIME_MODE = "rule"                   # rule / off
+REGIME_RELAX_GAMMA = 0.35              # 向满仓混合比例
+REGIME_STRESS_THRESHOLD = 0.8          # 压力门控阈值（基于 F01/F02/F04）
+REGIME_MAX_STEP = 0.03                 # 仓位日度变化上限

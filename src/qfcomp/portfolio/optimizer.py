@@ -15,7 +15,7 @@
 """
 import numpy as np
 import pandas as pd
-from scipy import optimize
+from scipy import optimize, stats
 
 from qfcomp.config import (
     SHRINKAGE_FACTOR,
@@ -214,28 +214,70 @@ def risk_parity_weights(cov: pd.DataFrame,
 # CVaR 最小化
 # ---------------------------------------------------------------------------
 
-def cvar_weights(ret_window: pd.DataFrame,
-                 alpha: float = None,
-                 max_weight: float = None,
-                 min_holdings: int = None,
-                 prev_weights: pd.Series = None,
-                 turnover_lambda: float = None) -> pd.Series:
-    """
-    最小化历史场景 CVaR（Rockafellar-Uryasev 线性规划）：
-      min z + (1 / ((1-alpha) * T)) * sum(u_t)
-      s.t. u_t >= loss_t - z, u_t >= 0
-           sum(w)=1, 0<=w<=max_weight
-    其中 loss_t = -(r_t^T w)。
-    """
-    alpha = CVAR_ALPHA if alpha is None else alpha
-    max_weight = MAX_SINGLE_WEIGHT if max_weight is None else max_weight
-    min_holdings = MIN_HOLDINGS if min_holdings is None else min_holdings
-    turnover_lambda = CVAR_TURNOVER_LAMBDA if turnover_lambda is None else turnover_lambda
+def _normalize_cvar_method(method: str | None) -> str:
+    method = "empirical" if method is None else str(method).strip().lower()
+    alias = {
+        "lp": "empirical",
+        "historical": "empirical",
+        "gaussian": "parametric",
+        "cornish-fisher": "cornish_fisher",
+        "cf": "cornish_fisher",
+    }
+    method = alias.get(method, method)
+    valid = {"empirical", "parametric", "cornish_fisher"}
+    if method not in valid:
+        raise ValueError(f"未知 cvar_method={method}，可选: {sorted(valid)}")
+    return method
 
-    if not (0.0 < alpha < 1.0):
-        raise ValueError(f"alpha 必须在 (0,1) 区间内，当前为 {alpha}")
 
-    ret_use = ret_window.dropna(how="all", axis=1).dropna(how="any", axis=0)
+def _moment_based_cvar_loss(port_ret: np.ndarray, alpha: float, method: str) -> float:
+    """
+    基于矩估计的 CVaR 近似损失（以 loss 口径最小化）：
+      loss = -E[r] + ES_tail
+    method:
+      - parametric: 高斯假设
+      - cornish_fisher: 对分位点做偏度/峰度修正
+    """
+    x = np.asarray(port_ret, dtype=float)
+    if x.size < 3:
+        return float("inf")
+
+    mu = float(np.nanmean(x))
+    sigma = float(np.nanstd(x, ddof=1))
+    sigma = max(sigma, 1e-8)
+    tail_prob = max(1.0 - float(alpha), 1e-8)
+
+    z = float(stats.norm.ppf(alpha))
+    if method == "cornish_fisher":
+        centered = x - mu
+        m2 = float(np.mean(centered ** 2))
+        if m2 <= 1e-16:
+            skew = 0.0
+            ex_kurt = 0.0
+        else:
+            m3 = float(np.mean(centered ** 3))
+            m4 = float(np.mean(centered ** 4))
+            skew = m3 / (m2 ** 1.5)
+            ex_kurt = m4 / (m2 ** 2) - 3.0
+        z = (
+            z
+            + (z ** 2 - 1.0) * skew / 6.0
+            + (z ** 3 - 3.0 * z) * ex_kurt / 24.0
+            - (2.0 * z ** 3 - 5.0 * z) * (skew ** 2) / 36.0
+        )
+        z = float(np.clip(z, -5.0, 8.0))
+
+    tail_term = float(stats.norm.pdf(z)) / tail_prob
+    return -mu + sigma * tail_term
+
+
+def _cvar_weights_empirical(ret_use: pd.DataFrame,
+                            alpha: float,
+                            max_weight: float,
+                            min_holdings: int,
+                            prev_weights: pd.Series | np.ndarray | None,
+                            turnover_lambda: float | None) -> pd.Series:
+    """原始经验 CVaR（历史场景 LP）。"""
     assets = list(ret_use.columns)
     t_obs, n = ret_use.shape
     if n == 0 or t_obs == 0:
@@ -244,7 +286,6 @@ def cvar_weights(ret_window: pd.DataFrame,
         raise ValueError(f"不可行约束: n={n}, max_weight={max_weight}, 无法满足 sum(w)=1")
 
     r = ret_use.to_numpy()
-
     use_turnover_penalty = (turnover_lambda is not None) and (turnover_lambda > 0) and (prev_weights is not None)
     if use_turnover_penalty:
         if isinstance(prev_weights, pd.Series):
@@ -312,8 +353,99 @@ def cvar_weights(ret_window: pd.DataFrame,
         w = np.ones(n) / n
     else:
         w = res.x[:n]
-
     return _post_process_weights(w, assets, max_weight, min_holdings)
+
+
+def _cvar_weights_moment_based(ret_use: pd.DataFrame,
+                               alpha: float,
+                               max_weight: float,
+                               min_holdings: int,
+                               prev_weights: pd.Series | np.ndarray | None,
+                               turnover_lambda: float | None,
+                               method: str) -> pd.Series:
+    """参数化 / Cornish-Fisher CVaR（矩估计 + 非线性优化）。"""
+    assets = list(ret_use.columns)
+    t_obs, n = ret_use.shape
+    if n == 0 or t_obs == 0:
+        return pd.Series(dtype=float)
+    if max_weight * n < 1 - 1e-12:
+        raise ValueError(f"不可行约束: n={n}, max_weight={max_weight}, 无法满足 sum(w)=1")
+
+    r = ret_use.to_numpy()
+    use_turnover_penalty = (turnover_lambda is not None) and (turnover_lambda > 0) and (prev_weights is not None)
+    if use_turnover_penalty:
+        if isinstance(prev_weights, pd.Series):
+            prev_series = prev_weights
+        else:
+            prev_series = pd.Series(prev_weights)
+        prev = prev_series.reindex(assets).fillna(0.0).to_numpy(dtype=float)
+        prev = np.clip(prev, 0.0, None)
+    else:
+        prev = None
+
+    def obj(w: np.ndarray) -> float:
+        port_ret = r @ w
+        loss = _moment_based_cvar_loss(port_ret=port_ret, alpha=alpha, method=method)
+        if use_turnover_penalty:
+            loss += float(turnover_lambda) * float(np.abs(w - prev).sum())
+        return float(loss)
+
+    cons = ({'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0},)
+    bounds = [(0.0, max_weight)] * n
+    if use_turnover_penalty and prev is not None and prev.sum() > 1e-12:
+        x0 = _project_to_capped_simplex(prev, max_weight=max_weight)
+    else:
+        x0 = np.ones(n) / n
+
+    res = optimize.minimize(obj, x0, method='SLSQP', bounds=bounds, constraints=cons)
+    if not res.success or res.x is None:
+        w = x0
+    else:
+        w = res.x
+    return _post_process_weights(w, assets, max_weight, min_holdings)
+
+
+def cvar_weights(ret_window: pd.DataFrame,
+                 alpha: float = None,
+                 max_weight: float = None,
+                 min_holdings: int = None,
+                 prev_weights: pd.Series = None,
+                 turnover_lambda: float = None,
+                 cvar_method: str = "empirical") -> pd.Series:
+    """
+    统一 CVaR 权重入口：
+      - empirical: 历史场景 CVaR（Rockafellar-Uryasev 线性规划）
+      - parametric: 高斯参数化 CVaR
+      - cornish_fisher: 偏度/峰度修正的参数化 CVaR
+    """
+    alpha = CVAR_ALPHA if alpha is None else alpha
+    max_weight = MAX_SINGLE_WEIGHT if max_weight is None else max_weight
+    min_holdings = MIN_HOLDINGS if min_holdings is None else min_holdings
+    turnover_lambda = CVAR_TURNOVER_LAMBDA if turnover_lambda is None else turnover_lambda
+    cvar_method = _normalize_cvar_method(cvar_method)
+
+    if not (0.0 < alpha < 1.0):
+        raise ValueError(f"alpha 必须在 (0,1) 区间内，当前为 {alpha}")
+
+    ret_use = ret_window.dropna(how="all", axis=1).dropna(how="any", axis=0)
+    if cvar_method == "empirical":
+        return _cvar_weights_empirical(
+            ret_use=ret_use,
+            alpha=alpha,
+            max_weight=max_weight,
+            min_holdings=min_holdings,
+            prev_weights=prev_weights,
+            turnover_lambda=turnover_lambda,
+        )
+    return _cvar_weights_moment_based(
+        ret_use=ret_use,
+        alpha=alpha,
+        max_weight=max_weight,
+        min_holdings=min_holdings,
+        prev_weights=prev_weights,
+        turnover_lambda=turnover_lambda,
+        method=cvar_method,
+    )
 
 
 def hybrid_cvar_rp_weights(ret_window: pd.DataFrame,
@@ -323,7 +455,8 @@ def hybrid_cvar_rp_weights(ret_window: pd.DataFrame,
                            min_holdings: int = None,
                            shrinkage: float = None,
                            prev_weights: pd.Series = None,
-                           turnover_lambda: float = None) -> pd.Series:
+                           turnover_lambda: float = None,
+                           cvar_method: str = "empirical") -> pd.Series:
     """
     混合优化器：CVaR + 风险平价（凸组合）。
       w_final = (1 - beta) * w_cvar + beta * w_rp
@@ -350,6 +483,7 @@ def hybrid_cvar_rp_weights(ret_window: pd.DataFrame,
         min_holdings=min_holdings,
         prev_weights=prev_weights,
         turnover_lambda=turnover_lambda,
+        cvar_method=cvar_method,
     ).reindex(assets).fillna(0.0)
 
     cov = compute_cov_from_returns(ret_use, shrinkage=shrinkage)
