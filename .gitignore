@@ -19,7 +19,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
+*.out
 # Virtual / conda
 .venv/
 venv/
@@ -40,7 +40,6 @@ Thumbs.db
 
 # Project: generated outputs (per-run timestamp dirs)
 outputs/
-data/
 *.pdf
 # Project: data (large or local; uncomment if you don't want to track)
 # data/
