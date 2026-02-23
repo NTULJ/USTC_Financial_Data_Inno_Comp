@@ -30,7 +30,7 @@ qf-main
 python src/qfcomp/pipelines/run_main.py \
   --combine-method icir_robust \
   --regime-mode rule \
-  --regime-relax-gamma 0.25 \
+  --regime-relax-gamma 0.35 \
   --regime-stress-threshold 0.8 \
   --regime-max-step 0.03 \
   --best-params-json outputs/cvar_hybrid_bayes_split_20260223_214730/CVAR贝叶斯_best_params.json \
@@ -44,6 +44,30 @@ python src/qfcomp/pipelines/run_cvar_bayes.py --help
 或（安装了项目脚本后）：
 ```bash
 qf-cvar-bayes --help
+```
+### 0.5 `src` 目录结构
+```text
+src/
+└── qfcomp/
+    ├── analysis/
+    │   └── cvar_tuning_plots.py        # CVaR 调参结果可视化
+    ├── backtest/
+    │   └── engine.py                   # bt 回测引擎封装与绩效统计
+    ├── config/
+    │   └── base.py                     # 全局配置与默认参数
+    ├── data_loader/
+    │   └── loader.py                   # 附件数据读取、对齐、调仓日生成
+    ├── factors/
+    │   ├── calc.py                     # 因子计算与标准化
+    │   ├── combine.py                  # 因子合成（icir / icir_robust）
+    │   ├── library.py                  # 因子定义库
+    │   └── testing.py                  # 单因子 IC / ICIR / p 值评估
+    ├── pipelines/
+    │   ├── run_main.py                 # 主流程：因子->选股->优化->回测
+    │   └── run_cvar_bayes.py           # WFO + Optuna 的 CVaR/Hybrid 调参
+    └── portfolio/
+        ├── optimizer.py                # RP/CVaR/Hybrid 权重优化
+        └── regime.py                   # 宏观 Regime 仓位缩放（rule/rule_v2）
 ```
 
 ## 1. 这个项目在做什么
@@ -125,7 +149,7 @@ qf-cvar-bayes --help
 - 在高相关簇中保留 `A02` 是有效决策。
 - 当前最稳版本是 pairwise 去重（`corr>0.7`）+ top_n=9 方案。
 
-### 6.2 合成方法 × Regime 消融（run_main，非最优参数口径）
+### 6.2 合成方法 × Regime 消融（贝叶斯调参前对比）
 | 组合 | 输出目录 | 优化后Sharpe | 优化后Calmar | 优化后MDD |
 |---|---|---:|---:|---:|
 | `icir + rule` | `outputs/20260223_223044` | 1.095 | 1.340 | -7.68% |
@@ -137,7 +161,7 @@ qf-cvar-bayes --help
 - 在非最优参数下，`icir_robust` 尚未优于 `icir`。
 - `regime=off` 会提升收益/Calmar，但会增加回撤。
 
-### 6.3 在“最优 Bayes 参数 + 去重因子”下复现（run_main）
+### 6.3 在“最优 Bayes 参数 + 去重因子”下复现
 统一输入：
 - 最优参数：`outputs/cvar_hybrid_bayes_split_20260223_214730/CVAR贝叶斯_best_params.json`
 - 去重因子：`data/corr0.7_greedy_有效因子.csv`
@@ -183,13 +207,3 @@ qf-cvar-bayes --help
   - `turnover_lambda=0.0041403`
   - `hybrid_beta=0.05`
   - `max_weight=0.35`
-
-## 8. 截止前待办（高优先）
-- 用 `seed=7/42/123` 对“最终配置（含 regime_v2）”做三次复现实验，确认稳定性区间（至少记录 Sharpe、Calmar、MDD）。
-- 在 `gamma=0.25`（保守）与 `gamma=0.35`（进攻）之间完成最终版本二选一，并固定提交口径。
-- 固化最终复现脚本（单命令）与输出目录命名规范，避免提交前参数漂移。
-- 同步更新最终版报告中的：
-  - WFO 目标函数与防前视说明
-  - 因子去重策略说明（为何保留 A02）
-  - Regime v2 设计（提仓混合 + 压力门控 + 限速）与关键消融表（6.1/6.3/6.4）
-  - 最终参数表与一键复现实验命令。
