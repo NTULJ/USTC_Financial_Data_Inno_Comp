@@ -13,6 +13,7 @@ eggs/
 lib/
 lib64/
 parts/
+.pytest_cache/
 sdist/
 var/
 wheels/
@@ -39,7 +40,11 @@ ENV/
 Thumbs.db
 
 # Project: generated outputs (per-run timestamp dirs)
+docs/
 outputs/
 *.pdf
+legacy/
+logs/
+
 # Project: data (large or local; uncomment if you don't want to track)
 # data/

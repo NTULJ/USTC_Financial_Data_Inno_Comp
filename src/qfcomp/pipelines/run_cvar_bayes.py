@@ -240,6 +240,49 @@ def _safe_float(v: object, default: float = float("nan")) -> float:
     return default
 
 
+def _compute_wfo_objective(
+    *,
+    mean_sharpe: float,
+    std_sharpe: float,
+    min_sharpe: float,
+    mean_excess: float,
+    min_excess: float,
+    mean_active_share: float,
+    mean_turnover: float,
+    feasible_all_folds: bool,
+    feasible_violations_total: int,
+    std_penalty: float,
+    worst_penalty: float,
+    sharpe_floor: float,
+    rp_anchor_lambda: float,
+    turnover_penalty: float,
+    mean_excess_floor: float,
+    worst_excess_floor: float,
+    excess_penalty: float,
+) -> float:
+    obj = float(mean_sharpe)
+    obj -= float(std_penalty) * float(std_sharpe)
+    obj -= float(worst_penalty) * max(0.0, float(sharpe_floor) - float(min_sharpe))
+
+    if np.isfinite(mean_active_share):
+        obj -= float(rp_anchor_lambda) * float(mean_active_share)
+    else:
+        obj -= float(rp_anchor_lambda)
+
+    if np.isfinite(mean_turnover):
+        obj -= float(turnover_penalty) * float(mean_turnover)
+    else:
+        obj -= float(turnover_penalty)
+
+    if float(mean_excess) < float(mean_excess_floor):
+        obj -= float(excess_penalty) * (float(mean_excess_floor) - float(mean_excess))
+    if float(min_excess) < float(worst_excess_floor):
+        obj -= float(excess_penalty) * (float(worst_excess_floor) - float(min_excess))
+    if not bool(feasible_all_folds):
+        obj -= 1.0 + 0.05 * float(feasible_violations_total)
+    return float(obj)
+
+
 def _first_trading_on_or_after(index: pd.DatetimeIndex, dt: pd.Timestamp) -> Optional[pd.Timestamp]:
     pos = index.searchsorted(dt, side="left")
     if pos >= len(index):
@@ -422,9 +465,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--obj-worst-penalty", type=float, default=1.0, help="worst-fold 惩罚系数")
     parser.add_argument("--obj-sharpe-floor", type=float, default=0.0, help="worst-fold Sharpe 下限")
     parser.add_argument("--rp-anchor-lambda", type=float, default=0.2, help="与 RP 偏离(active share)惩罚系数")
+    parser.add_argument("--obj-turnover-penalty", type=float, default=0.2, help="平均换手惩罚系数")
     parser.add_argument("--wfo-mean-excess-floor", type=float, default=-0.02, help="mean(OOS Sharpe-RP) 软下限")
     parser.add_argument("--wfo-worst-excess-floor", type=float, default=-0.20, help="worst(OOS Sharpe-RP) 软下限")
     parser.add_argument("--wfo-excess-penalty", type=float, default=1.0, help="Sharpe 超额软下限惩罚系数")
+    parser.add_argument(
+        "--pruner",
+        type=str,
+        default="median",
+        choices=["none", "median"],
+        help="Optuna 剪枝器类型：none=关闭, median=中位数剪枝",
+    )
+    parser.add_argument("--pruner-startup-trials", type=int, default=20, help="剪枝前最少完整 trial 数")
+    parser.add_argument("--pruner-warmup-steps", type=int, default=2, help="每个 trial 的 warmup fold 步数")
 
     parser.add_argument(
         "--reuse-run-dir",
@@ -479,8 +532,10 @@ def main() -> None:
         raise ValueError("wfo-min-folds 必须 > 0。")
     if args.obj_std_penalty < 0 or args.obj_worst_penalty < 0:
         raise ValueError("obj-std-penalty / obj-worst-penalty 不能为负。")
-    if args.rp_anchor_lambda < 0 or args.wfo_excess_penalty < 0:
-        raise ValueError("rp-anchor-lambda / wfo-excess-penalty 不能为负。")
+    if args.rp_anchor_lambda < 0 or args.wfo_excess_penalty < 0 or args.obj_turnover_penalty < 0:
+        raise ValueError("rp-anchor-lambda / wfo-excess-penalty / obj-turnover-penalty 不能为负。")
+    if args.pruner_startup_trials < 0 or args.pruner_warmup_steps < 0:
+        raise ValueError("pruner-startup-trials / pruner-warmup-steps 不能为负。")
 
     cvar_methods = [m.strip().lower() for m in str(args.cvar_methods).split(",") if m.strip()]
     alias = {
@@ -582,6 +637,10 @@ def main() -> None:
                 "obj_worst_penalty": float(args.obj_worst_penalty),
                 "obj_sharpe_floor": float(args.obj_sharpe_floor),
                 "rp_anchor_lambda": float(args.rp_anchor_lambda),
+                "obj_turnover_penalty": float(args.obj_turnover_penalty),
+                "pruner": str(args.pruner),
+                "pruner_startup_trials": int(args.pruner_startup_trials),
+                "pruner_warmup_steps": int(args.pruner_warmup_steps),
             }
         ]
     )
@@ -711,6 +770,7 @@ def main() -> None:
         turnover_lambda: float,
         hybrid_beta: float,
         cvar_method: str,
+        trial: Optional[object] = None,
     ) -> Dict[str, object]:
         rec: Dict[str, object] = {
             "trial_number": int(trial_no),
@@ -743,6 +803,9 @@ def main() -> None:
             "pass_all_rules": False,
             "status": "ok",
             "error": "",
+            "interim_objective": np.nan,
+            "pruned_at_fold": np.nan,
+            "is_pruned": False,
         }
         try:
             fold_sharpes: List[float] = []
@@ -752,7 +815,7 @@ def main() -> None:
             feasible_flags: List[bool] = []
             feasible_violations_total = 0
 
-            for fold in wfo_folds:
+            for fold_step, fold in enumerate(wfo_folds, start=1):
                 fold_id = int(fold["fold_id"])
                 fold_test_start = pd.Timestamp(fold["test_start"])
                 fold_test_end = pd.Timestamp(fold["test_end"])
@@ -815,6 +878,66 @@ def main() -> None:
                 if np.isfinite(active_share):
                     fold_active_share.append(float(active_share))
 
+                if trial is not None and fold_sharpes:
+                    sharpe_arr_tmp = np.array(fold_sharpes, dtype=float)
+                    excess_arr_tmp = np.array(fold_excess, dtype=float)
+                    mean_sharpe_tmp = float(np.mean(sharpe_arr_tmp))
+                    std_sharpe_tmp = float(np.std(sharpe_arr_tmp, ddof=1)) if len(sharpe_arr_tmp) > 1 else 0.0
+                    min_sharpe_tmp = float(np.min(sharpe_arr_tmp))
+                    mean_excess_tmp = float(np.mean(excess_arr_tmp))
+                    min_excess_tmp = float(np.min(excess_arr_tmp))
+                    mean_turnover_tmp = float(np.mean(fold_turnover)) if fold_turnover else np.nan
+                    mean_active_share_tmp = float(np.mean(fold_active_share)) if fold_active_share else np.nan
+                    feasible_all_folds_tmp = bool(all(feasible_flags)) if feasible_flags else False
+                    interim_obj = _compute_wfo_objective(
+                        mean_sharpe=mean_sharpe_tmp,
+                        std_sharpe=std_sharpe_tmp,
+                        min_sharpe=min_sharpe_tmp,
+                        mean_excess=mean_excess_tmp,
+                        min_excess=min_excess_tmp,
+                        mean_active_share=mean_active_share_tmp,
+                        mean_turnover=mean_turnover_tmp,
+                        feasible_all_folds=feasible_all_folds_tmp,
+                        feasible_violations_total=feasible_violations_total,
+                        std_penalty=float(args.obj_std_penalty),
+                        worst_penalty=float(args.obj_worst_penalty),
+                        sharpe_floor=float(args.obj_sharpe_floor),
+                        rp_anchor_lambda=float(args.rp_anchor_lambda),
+                        turnover_penalty=float(args.obj_turnover_penalty),
+                        mean_excess_floor=float(args.wfo_mean_excess_floor),
+                        worst_excess_floor=float(args.wfo_worst_excess_floor),
+                        excess_penalty=float(args.wfo_excess_penalty),
+                    )
+                    trial.report(interim_obj, step=int(fold_step))
+                    if trial.should_prune():
+                        rec.update(
+                            {
+                                "wfo_total_folds": int(len(wfo_folds)),
+                                "wfo_valid_folds": int(len(sharpe_arr_tmp)),
+                                "wfo_mean_sharpe": mean_sharpe_tmp,
+                                "wfo_std_sharpe": std_sharpe_tmp,
+                                "wfo_min_sharpe": min_sharpe_tmp,
+                                "wfo_mean_sharpe_excess": mean_excess_tmp,
+                                "wfo_min_sharpe_excess": min_excess_tmp,
+                                "avg_turnover": mean_turnover_tmp,
+                                "avg_active_share_to_rp": mean_active_share_tmp,
+                                "feasible_all_dates": bool(feasible_all_folds_tmp),
+                                "feasible_violations": int(feasible_violations_total),
+                                "enough_wfo_folds": int(len(sharpe_arr_tmp)) >= int(args.wfo_min_folds),
+                                "worst_sharpe_ok": min_sharpe_tmp >= float(args.obj_sharpe_floor),
+                                "mean_excess_ok": mean_excess_tmp >= float(args.wfo_mean_excess_floor),
+                                "worst_excess_ok": min_excess_tmp >= float(args.wfo_worst_excess_floor),
+                                "pass_all_rules": False,
+                                "sharpe": mean_sharpe_tmp,
+                                "status": "pruned",
+                                "interim_objective": float(interim_obj),
+                                "pruned_at_fold": int(fold_id),
+                                "is_pruned": True,
+                                "objective": -1e6,
+                            }
+                        )
+                        return rec
+
             valid_folds = len(fold_sharpes)
             if valid_folds == 0:
                 rec["status"] = "empty_wfo"
@@ -872,20 +995,25 @@ def main() -> None:
                 rec["objective"] = -1e6
                 return rec
 
-            obj = mean_sharpe
-            obj -= float(args.obj_std_penalty) * std_sharpe
-            obj -= float(args.obj_worst_penalty) * max(0.0, float(args.obj_sharpe_floor) - min_sharpe)
-            if np.isfinite(mean_active_share):
-                obj -= float(args.rp_anchor_lambda) * mean_active_share
-            else:
-                obj -= float(args.rp_anchor_lambda)
-
-            if mean_excess < float(args.wfo_mean_excess_floor):
-                obj -= float(args.wfo_excess_penalty) * (float(args.wfo_mean_excess_floor) - mean_excess)
-            if min_excess < float(args.wfo_worst_excess_floor):
-                obj -= float(args.wfo_excess_penalty) * (float(args.wfo_worst_excess_floor) - min_excess)
-            if not feasible_all_folds:
-                obj -= 1.0 + 0.05 * float(feasible_violations_total)
+            obj = _compute_wfo_objective(
+                mean_sharpe=mean_sharpe,
+                std_sharpe=std_sharpe,
+                min_sharpe=min_sharpe,
+                mean_excess=mean_excess,
+                min_excess=min_excess,
+                mean_active_share=mean_active_share,
+                mean_turnover=mean_turnover,
+                feasible_all_folds=feasible_all_folds,
+                feasible_violations_total=feasible_violations_total,
+                std_penalty=float(args.obj_std_penalty),
+                worst_penalty=float(args.obj_worst_penalty),
+                sharpe_floor=float(args.obj_sharpe_floor),
+                rp_anchor_lambda=float(args.rp_anchor_lambda),
+                turnover_penalty=float(args.obj_turnover_penalty),
+                mean_excess_floor=float(args.wfo_mean_excess_floor),
+                worst_excess_floor=float(args.wfo_worst_excess_floor),
+                excess_penalty=float(args.wfo_excess_penalty),
+            )
 
             rec["objective"] = float(obj)
             return rec
@@ -900,7 +1028,15 @@ def main() -> None:
         n_startup_trials=max(1, int(args.n_startup_trials)),
         multivariate=True,
     )
-    study = optuna.create_study(direction="maximize", sampler=sampler)
+    if str(args.pruner).lower() == "median":
+        pruner = optuna.pruners.MedianPruner(
+            n_startup_trials=int(args.pruner_startup_trials),
+            n_warmup_steps=int(args.pruner_warmup_steps),
+            interval_steps=1,
+        )
+    else:
+        pruner = optuna.pruners.NopPruner()
+    study = optuna.create_study(direction="maximize", sampler=sampler, pruner=pruner)
 
     def objective(trial) -> float:
         top_n = trial.suggest_int(
@@ -940,8 +1076,11 @@ def main() -> None:
             turnover_lambda=turnover_lambda,
             hybrid_beta=hybrid_beta,
             cvar_method=cvar_method,
+            trial=trial,
         )
         trial_rows.append(rec)
+        if rec.get("status") == "pruned":
+            raise optuna.TrialPruned(f"pruned_at_fold={rec.get('pruned_at_fold')}")
         return float(rec["objective"])
 
     print("=" * 60)
@@ -949,7 +1088,8 @@ def main() -> None:
         f"Step 3: 启动贝叶斯调参（optimizer=hybrid_cvar_rp, "
         f"fixed_max_weight={FIXED_MAX_WEIGHT:.2f}, "
         f"cvar_methods={cvar_methods}, "
-        f"objective=mean_sharpe-std_penalty*std-worst_penalty*shortfall-rp_anchor, "
+        f"objective=mean_sharpe-std_penalty*std-worst_penalty*shortfall-rp_anchor-turnover_penalty*avg_turnover, "
+        f"pruner={str(args.pruner).lower()}, "
         f"top_n_range=[{int(args.top_n_low)},{int(args.top_n_high)}], "
         f"n_trials={int(args.n_trials)}）"
     )
@@ -1015,7 +1155,8 @@ def main() -> None:
         ).iloc[0]
         selected_from = "pass_all_rules"
     else:
-        best_row = trials_df.iloc[0]
+        fallback_df = trials_df[~trials_df["status"].isin(["pruned", "exception"])].copy()
+        best_row = (fallback_df if not fallback_df.empty else trials_df).iloc[0]
         selected_from = "objective_fallback"
 
     best_params = {
@@ -1179,6 +1320,21 @@ def main() -> None:
         "test_start": str(test_start.date()),
         "test_end": str(test_end.date()),
         "fixed_max_weight": FIXED_MAX_WEIGHT,
+        "objective_config": {
+            "obj_std_penalty": float(args.obj_std_penalty),
+            "obj_worst_penalty": float(args.obj_worst_penalty),
+            "obj_sharpe_floor": float(args.obj_sharpe_floor),
+            "rp_anchor_lambda": float(args.rp_anchor_lambda),
+            "obj_turnover_penalty": float(args.obj_turnover_penalty),
+            "wfo_mean_excess_floor": float(args.wfo_mean_excess_floor),
+            "wfo_worst_excess_floor": float(args.wfo_worst_excess_floor),
+            "wfo_excess_penalty": float(args.wfo_excess_penalty),
+        },
+        "pruner_config": {
+            "pruner": str(args.pruner),
+            "pruner_startup_trials": int(args.pruner_startup_trials),
+            "pruner_warmup_steps": int(args.pruner_warmup_steps),
+        },
         "cvar_methods": cvar_methods,
         "cvar_method_compare_file": str(method_cmp_path),
         "wfo_folds": wfo_folds_payload,
@@ -1233,6 +1389,8 @@ def main() -> None:
     print(f"  test-range 区间: {test_start.date()} ~ {test_end.date()}")
     print(f"  WFO 折数: {len(wfo_folds)}")
     print(f"  trial 数: {len(trials_df)}")
+    if "status" in trials_df.columns:
+        print(f"  剪枝 trial 数: {int((trials_df['status'] == 'pruned').sum())}")
     print(f"  通过全部规则数: {int(pass_df.shape[0])}")
     print(f"  最优来源: {selected_from}")
     print(f"  最优 CVaR 方法: {best_params['cvar_method']}")

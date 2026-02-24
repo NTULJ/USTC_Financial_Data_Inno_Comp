@@ -23,6 +23,7 @@ qf-main
   - 最优参数：`outputs/cvar_hybrid_bayes_split_20260223_214730/CVAR贝叶斯_best_params.json`
   - 合成方法：`icir_robust`
   - Regime：`rule_v2`（`gamma=0.35, stress_threshold=0.8, max_step=0.03`）
+- 若上述默认文件被删除，`run_main.py` 会自动回退到 `base.py` 中的内置常量（`DEFAULT_BEST_PARAMS` / `DEFAULT_EFFECTIVE_FACTORS`）。
 - 输出目录采用微秒级时间戳，不会因并行运行互相覆盖。
 
 ### 0.3 主流程（显式参数复现）
@@ -44,6 +45,20 @@ python src/qfcomp/pipelines/run_cvar_bayes.py --help
 或（安装了项目脚本后）：
 ```bash
 qf-cvar-bayes --help
+```
+
+常用稳定版示例（含换手惩罚 + 剪枝）：
+```bash
+python src/qfcomp/pipelines/run_cvar_bayes.py \
+  --reuse-run-dir outputs/<某次run_main输出目录> \
+  --n-trials 160 \
+  --obj-std-penalty 1.0 \
+  --obj-worst-penalty 1.0 \
+  --rp-anchor-lambda 0.2 \
+  --obj-turnover-penalty 0.2 \
+  --pruner median \
+  --pruner-startup-trials 20 \
+  --pruner-warmup-steps 2
 ```
 ### 0.5 `src` 目录结构
 ```text
