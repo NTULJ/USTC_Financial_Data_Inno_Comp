@@ -29,7 +29,7 @@ from qfcomp.config import (
     HYBRID_BETA,
     OPTIMIZER_METHOD,
     COMBINE_METHOD,
-    DEFAULT_BEST_PARAMS,
+    DEFAULT_PORTFOLIO_PARAMS,
     DEFAULT_EFFECTIVE_FACTORS,
     REGIME_MODE,
     REGIME_RELAX_GAMMA,
@@ -59,14 +59,14 @@ def main() -> None:
     print(f"本次运行输出目录: {run_dir}\n")
 
     # 固定提交参数（全部来自 base.py）
-    best_params = dict(DEFAULT_BEST_PARAMS)
-    top_n_use = int(best_params.get("top_n", TOP_N))
-    cov_window_use = int(best_params.get("cov_window", COV_LOOKBACK))
-    cvar_alpha_use = float(best_params.get("cvar_alpha", CVAR_ALPHA))
-    cvar_method_use = str(best_params.get("cvar_method", CVAR_METHOD))
-    turnover_lambda_use = float(best_params.get("turnover_lambda", CVAR_TURNOVER_LAMBDA))
-    hybrid_beta_use = float(best_params.get("hybrid_beta", HYBRID_BETA))
-    max_weight_use = float(best_params.get("max_weight", MAX_SINGLE_WEIGHT))
+    default_params = dict(DEFAULT_PORTFOLIO_PARAMS)
+    top_n_use = int(default_params.get("top_n", TOP_N))
+    cov_window_use = int(default_params.get("cov_window", COV_LOOKBACK))
+    cvar_alpha_use = float(default_params.get("cvar_alpha", CVAR_ALPHA))
+    cvar_method_use = str(default_params.get("cvar_method", CVAR_METHOD))
+    turnover_lambda_use = float(default_params.get("turnover_lambda", CVAR_TURNOVER_LAMBDA))
+    hybrid_beta_use = float(default_params.get("hybrid_beta", HYBRID_BETA))
+    max_weight_use = float(default_params.get("max_weight", MAX_SINGLE_WEIGHT))
 
     if max_weight_use > MAX_SINGLE_WEIGHT:
         print(f"  警告: max_weight={max_weight_use:.4f} 超过上限 {MAX_SINGLE_WEIGHT:.4f}，已截断。")
@@ -301,4 +301,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

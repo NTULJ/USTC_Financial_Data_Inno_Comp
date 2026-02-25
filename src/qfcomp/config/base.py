@@ -23,7 +23,7 @@ BACKTEST_START = "2021-01-04"          # 回测起始日（赛题硬性要求）
 RISK_FREE_RATE = 0.0                   # 无风险利率（赛题要求 0%）
 TRANSACTION_COST = 2.5 / 10000         # 交易手续费 万分之2.5
 REBALANCE_FREQ = "W"                   # 调仓频率：周度
-TOP_N = 7                              # 每期选取 Top N 只 ETF（≥3）
+TOP_N = 3                              # 每期选取 Top N 只 ETF（≥3）
 MAX_SINGLE_WEIGHT = 0.35               # 单只 ETF 权重上限 35%
 MIN_HOLDINGS = 3                       # 最少持仓数量
 
@@ -66,27 +66,28 @@ COMBINE_ROBUST_CORR_PENALTY = 0.8      # icir_robust 的相关性惩罚强度
 COMBINE_ROBUST_TURNOVER_SMOOTH = 0.35  # icir_robust 的时间平滑强度(0,1]
 
 # ========== 组合优化参数 ==========
-COV_LOOKBACK = 145                      # 优化窗口（协方差或历史收益场景）
+COV_LOOKBACK = 180                      # 优化窗口（协方差或历史收益场景）
 SHRINKAGE_FACTOR = 0.05                 # Ledoit-Wolf 收缩系数（简化版）
-CVAR_ALPHA = 0.9224430987431493        # CVaR 置信水平（尾部比例 = 1 - alpha）
-CVAR_TURNOVER_LAMBDA = 0.028947638689254762  # CVaR 换手惩罚系数 λ（0 表示关闭）
-CVAR_METHOD = "empirical"              # CVaR 估计方法：empirical / parametric / cornish_fisher
-HYBRID_BETA = 0.1                      # 混合比例：0=纯CVaR, 1=纯风险平价
+CVAR_ALPHA = 0.94                      # CVaR 置信水平（尾部比例 = 1 - alpha）
+CVAR_TURNOVER_LAMBDA = 0.01            # CVaR 换手惩罚系数 λ（0 表示关闭）
+CVAR_METHOD = "cornish_fisher"             # CVaR 估计方法：empirical / parametric / cornish_fisher
+HYBRID_BETA = 0.10                     # 混合比例：0=纯CVaR, 1=纯风险平价
 
 # 优化器选择：risk_parity / min_variance / cvar / hybrid_cvar_rp
 OPTIMIZER_METHOD = "hybrid_cvar_rp"
 
-# ========== 最终提交配置（内置常量） ==========
-# 不依赖外部 best_params.json / 有效因子.csv，避免文件缺失导致不可复现
-DEFAULT_BEST_PARAMS = {
-    "top_n": 7,
-    "cvar_alpha": 0.9224430987431493,
-    "cvar_method": "empirical",
-    "cov_window": 145,
-    "max_weight": 0.35,
-    "turnover_lambda": 0.028947638689254762,
-    "hybrid_beta": 0.1,
+# ========== 主流程默认参数（run_main） ==========
+# 说明：由上方标量参数自动组装，避免同一参数多处手工维护
+DEFAULT_PORTFOLIO_PARAMS = {
+    "top_n": TOP_N,
+    "cvar_alpha": CVAR_ALPHA,
+    "cvar_method": CVAR_METHOD,
+    "cov_window": COV_LOOKBACK,
+    "max_weight": MAX_SINGLE_WEIGHT,
+    "turnover_lambda": CVAR_TURNOVER_LAMBDA,
+    "hybrid_beta": HYBRID_BETA,
 }
+
 DEFAULT_EFFECTIVE_FACTORS = (
     "A02",
     "A06",

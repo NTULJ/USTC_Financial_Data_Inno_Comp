@@ -21,6 +21,7 @@ dependencies = [
 [project.scripts]
 qf-main = "qfcomp.pipelines.run_main:main"
 qf-cvar-bayes = "qfcomp.pipelines.run_cvar_bayes:main"
+qf-strict-oos = "qfcomp.pipelines.run_strict_oos_stitch:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

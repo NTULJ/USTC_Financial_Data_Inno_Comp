@@ -19,24 +19,18 @@ qf-main
 
 说明：
 - 当前默认配置已写入 `src/qfcomp/config/base.py`，会自动加载：
-  - 去重因子：`data/corr0.7_greedy_有效因子.csv`
-  - 最优参数：`outputs/cvar_hybrid_bayes_split_20260223_214730/CVAR贝叶斯_best_params.json`
+  - 去重后的固定有效因子（内置常量）
+  - 最优优化参数（内置常量）
   - 合成方法：`icir_robust`
-  - Regime：`rule_v2`（`gamma=0.35, stress_threshold=0.8, max_step=0.03`）
-- 若上述默认文件被删除，`run_main.py` 会自动回退到 `base.py` 中的内置常量（`DEFAULT_BEST_PARAMS` / `DEFAULT_EFFECTIVE_FACTORS`）。
+  - Regime：`rule_v2`（`gamma=0.40, stress_threshold=0.8, max_step=0.03`）
+- `run_main.py` 为纯配置驱动版本，不再依赖外部 `best_params.json` / `有效因子.csv`。
 - 输出目录采用微秒级时间戳，不会因并行运行互相覆盖。
 
-### 0.3 主流程（显式参数复现）
+### 0.3 主流程（提交版复现）
 ```bash
-python src/qfcomp/pipelines/run_main.py \
-  --combine-method icir_robust \
-  --regime-mode rule \
-  --regime-relax-gamma 0.35 \
-  --regime-stress-threshold 0.8 \
-  --regime-max-step 0.03 \
-  --best-params-json outputs/cvar_hybrid_bayes_split_20260223_214730/CVAR贝叶斯_best_params.json \
-  --effective-factors-csv data/corr0.7_greedy_有效因子.csv
+python src/qfcomp/pipelines/run_main.py
 ```
+说明：提交版 `run_main.py` 不接受策略参数命令行覆盖，全部参数以 `src/qfcomp/config/base.py` 为准。
 
 ### 0.4 WFO Bayes 调参
 ```bash
@@ -60,7 +54,30 @@ python src/qfcomp/pipelines/run_cvar_bayes.py \
   --pruner-startup-trials 20 \
   --pruner-warmup-steps 2
 ```
-### 0.5 `src` 目录结构
+### 0.5 严格 OOS（分段重调参 + 净值拼接）
+```bash
+python src/qfcomp/pipelines/run_strict_oos_stitch.py --help
+```
+或（安装了项目脚本后）：
+```bash
+qf-strict-oos --help
+```
+
+示例（复用某次 `run_main` 输出的信号缓存）：
+```bash
+python src/qfcomp/pipelines/run_strict_oos_stitch.py \
+  --reuse-run-dir outputs/<某次run_main输出目录> \
+  --n-trials 40 \
+  --outer-test-start 2021-01-04 \
+  --outer-test-end 2025-10-30 \
+  --export-backtest-plots
+```
+
+说明：
+- 每个外层测试段开始前，使用该时点之前历史数据重新调参；
+- 该段参数仅用于该段 OOS 回测，最终将各段 OOS 净值首尾拼接；
+- 输出目录包含每段内层折配置、每段最优参数、每段绩效及拼接总绩效。
+### 0.6 `src` 目录结构
 ```text
 src/
 └── qfcomp/
@@ -79,7 +96,8 @@ src/
     │   └── testing.py                  # 单因子 IC / ICIR / p 值评估
     ├── pipelines/
     │   ├── run_main.py                 # 主流程：因子->选股->优化->回测
-    │   └── run_cvar_bayes.py           # WFO + Optuna 的 CVaR/Hybrid 调参
+    │   ├── run_cvar_bayes.py           # WFO + Optuna 的 CVaR/Hybrid 调参
+    │   └── run_strict_oos_stitch.py    # 严格时间推进 OOS：分段重调参+净值拼接
     └── portfolio/
         ├── optimizer.py                # RP/CVaR/Hybrid 权重优化
         └── regime.py                   # 宏观 Regime 仓位缩放（rule/rule_v2）
@@ -138,13 +156,8 @@ src/
   - 核心策略：pairwise 相关阈值 `|corr|>0.7`，按 `|ICIR|` 贪心保留（每簇保留 1 个）
   - 去重结果：18 -> 13 个因子，保留 `A02`，删除 `A01/A05/B05/D02/N01`
   - 结果文件：`outputs/20260223_195939_dedup_corr070_greedy/去重决策_greedy.csv`
-- `run_main.py` 已支持直接复用最终配置：
-  - `--best-params-json`：直接读取 `CVAR贝叶斯_best_params.json`
-  - `--effective-factors-csv`：直接指定外部有效因子清单（去重版）
-- `run_main.py` 已支持 Regime v2 参数化开关：
-  - `--regime-relax-gamma`：向满仓线性混合比例
-  - `--regime-stress-threshold`：压力门控阈值（基于 F01/F02/F04 平滑均值）
-  - `--regime-max-step`：仓位日度变化限速
+- `run_main.py` 已切换为提交版纯配置驱动：不再通过命令行读取 `best_params` 或有效因子 CSV。
+- Regime 参数固定在 `base.py`：`relax_gamma=0.40`、`stress_threshold=0.8`、`max_step=0.03`。
 - 输出目录冲突问题已修复：`run_main.py / run_cvar_bayes.py` 的输出时间戳已升级为微秒级，避免并行运行写入同一目录。
 
 ## 6. 最近实验结果与消融结论
@@ -203,6 +216,7 @@ src/
 | `off` | N/A | `outputs/20260223_230434` | 1.307 | 1.627 | -13.01% |
 | `rule_v2`（保守） | `gamma=0.25, th=0.8, step=0.03` | `outputs/20260223_230834` | 1.317 | 1.906 | -8.08% |
 | `rule_v2`（进攻） | `gamma=0.35, th=0.8, step=0.03` | `outputs/20260223_230915` | **1.330** | **1.974** | -8.12% |
+| `rule_v2`（进攻，最新复现） | `gamma=0.40, th=0.8, step=0.03` | `outputs/20260224_191252_097026` | **1.399** | **1.880** | -9.47% |
 
 结论：
 - `rule_v2` 相比原 `rule` 显著提升 Sharpe/Calmar，且回撤基本不恶化。
@@ -212,13 +226,13 @@ src/
 ## 7. 当前最优可提交配置（具体见config/base.py）
 - 因子集：`corr>0.7` pairwise 贪心去重后的 13 因子（保留 `A02`）
 - 合成方法：`icir_robust`
-- Regime：`rule_v2`（建议 `gamma=0.35, stress_threshold=0.8, max_step=0.03`）
+- Regime：`rule_v2`（建议 `gamma=0.40, stress_threshold=0.8, max_step=0.03`）
 - 优化器：`hybrid_cvar_rp`
 - 参数：
-  - `top_n=9`
-  - `cvar_alpha=0.923913`
-  - `cvar_method=cornish_fisher`
-  - `cov_window=160`
-  - `turnover_lambda=0.0041403`
-  - `hybrid_beta=0.05`
+  - `top_n=7`
+  - `cvar_alpha=0.922443`
+  - `cvar_method=empirical`
+  - `cov_window=145`
+  - `turnover_lambda=0.0289476`
+  - `hybrid_beta=0.10`
   - `max_weight=0.35`
